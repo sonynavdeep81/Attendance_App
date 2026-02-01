@@ -144,7 +144,10 @@ export const TakeAttendanceScreen: React.FC<Props> = ({ navigation, route }) => 
         activeOpacity={0.7}
       >
         <View style={styles.studentInfo}>
-          <Text style={[styles.rollNumber, isAbsent && styles.textAbsent]}>
+          <Text
+            style={[styles.rollNumber, isAbsent && styles.textAbsent]}
+            numberOfLines={1}
+          >
             {item.rollNumber}
           </Text>
           <Text style={[styles.studentName, isAbsent && styles.textAbsent]}>
@@ -424,7 +427,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#4A90D9',
-    width: 50,
+    marginRight: 12,
   },
   studentName: {
     fontSize: 16,

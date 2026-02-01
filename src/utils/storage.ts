@@ -330,15 +330,30 @@ const getSessionFromDates = (dates: string[]): string => {
   }
 };
 
-export const exportClassAttendanceToCSV = async (classId: string): Promise<{ csv: string; filename: string }> => {
+export const exportClassAttendanceToCSV = async (
+  classId: string,
+  filterDetainedOnly?: boolean
+): Promise<{ csv: string; filename: string }> => {
   const classInfo = await getClassById(classId);
-  const students = await getStudentsByClass(classId, true); // Always sort by roll for export
+  let students = await getStudentsByClass(classId, true); // Always sort by roll for export
   const attendanceRecords = await getAttendanceByClass(classId);
-  
+
   // Sort attendance records by date
   const sortedRecords = [...attendanceRecords].sort((a, b) => a.date.localeCompare(b.date));
   const dates = sortedRecords.map(r => r.date);
   const totalClasses = dates.length;
+
+  // Filter students if detained-only export is requested
+  if (filterDetainedOnly) {
+    students = students.filter(student => {
+      const totalAbsent = sortedRecords.filter(record =>
+        record.absentStudentIds.includes(student.id)
+      ).length;
+      const totalPresent = totalClasses - totalAbsent;
+      const percentage = totalClasses > 0 ? (totalPresent / totalClasses) * 100 : 100;
+      return percentage < 75; // Only include detained students
+    });
+  }
   
   const className = classInfo?.name || 'Class';
   const subject = classInfo?.subject || '';
@@ -438,9 +453,429 @@ export const exportClassAttendanceToCSV = async (classId: string): Promise<{ csv
 </body>
 </html>`;
 
-  const filename = `${className.replace(/[^a-zA-Z0-9]/g, '_')}_Attendance_${new Date().toISOString().split('T')[0]}.xls`;
-  
+  const filenameSuffix = filterDetainedOnly ? '_Detained' : '';
+  const filename = `${className.replace(/[^a-zA-Z0-9]/g, '_')}_Attendance${filenameSuffix}_${new Date().toISOString().split('T')[0]}.xls`;
+
   return { csv: xlsContent, filename };
+};
+
+// ============ MULTI-SHEET EXPORT ============
+
+/**
+ * Sanitize class name to be used as Excel sheet name
+ * Excel sheet names:
+ * - Cannot contain: \ / ? * [ ]
+ * - Maximum length: 31 characters
+ */
+const sanitizeSheetName = (name: string, usedNames: Set<string> = new Set()): string => {
+  // Remove invalid characters
+  let sanitized = name.replace(/[\\\/\?\*\[\]]/g, '_');
+
+  // Truncate to 31 characters
+  if (sanitized.length > 31) {
+    sanitized = sanitized.substring(0, 31);
+  }
+
+  // Handle duplicates by appending number
+  let finalName = sanitized;
+  let counter = 2;
+  while (usedNames.has(finalName)) {
+    const suffix = `_${counter}`;
+    const maxLength = 31 - suffix.length;
+    finalName = sanitized.substring(0, maxLength) + suffix;
+    counter++;
+  }
+
+  usedNames.add(finalName);
+  return finalName;
+};
+
+/**
+ * Generate attendance table content for a single class (for multi-sheet export)
+ * Returns Excel XML Table element
+ */
+const generateClassAttendanceSheet = async (classId: string): Promise<string> => {
+  const classInfo = await getClassById(classId);
+  const students = await getStudentsByClass(classId, true); // Sort by roll
+  const attendanceRecords = await getAttendanceByClass(classId);
+
+  // If no attendance records, create a simple message
+  if (attendanceRecords.length === 0) {
+    const className = classInfo?.name || 'Class';
+    return `    <Table>
+      <Row>
+        <Cell><Data ss:Type="String">${className}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">No attendance records found.</Data></Cell>
+      </Row>
+    </Table>`;
+  }
+
+  // Sort attendance records by date
+  const sortedRecords = [...attendanceRecords].sort((a, b) => a.date.localeCompare(b.date));
+  const dates = sortedRecords.map(r => r.date);
+  const totalClasses = dates.length;
+
+  const className = classInfo?.name || 'Class';
+  const subject = classInfo?.subject || '';
+  const session = getSessionFromDates(dates);
+
+  // Build XML table
+  let tableXML = '    <Table>\n';
+
+  // Header rows
+  tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
+          <Data ss:Type="String">Attendance  ${className}</Data>
+        </Cell>
+      </Row>\n`;
+
+  tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
+          <Data ss:Type="String">${session}</Data>
+        </Cell>
+      </Row>\n`;
+
+  if (subject) {
+    tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
+          <Data ss:Type="String">${subject}</Data>
+        </Cell>
+      </Row>\n`;
+  }
+
+  tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
+          <Data ss:Type="String">Total Classes: ${totalClasses}</Data>
+        </Cell>
+      </Row>\n`;
+
+  // Empty row
+  tableXML += `      <Row></Row>\n`;
+
+  // Column headers
+  tableXML += '      <Row>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">S No.</Data></Cell>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Roll No.</Data></Cell>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Name</Data></Cell>\n';
+
+  dates.forEach(date => {
+    const d = new Date(date);
+    const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+    tableXML += `        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">${dateStr}</Data></Cell>\n`;
+  });
+
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Total</Data></Cell>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Attendance %</Data></Cell>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Status</Data></Cell>\n';
+  tableXML += '      </Row>\n';
+
+  // Data rows
+  students.forEach((student, index) => {
+    let totalPresent = 0;
+
+    // Calculate attendance
+    const attendanceCells: string[] = [];
+    dates.forEach(date => {
+      const record = sortedRecords.find(r => r.date === date);
+      const isAbsent = record?.absentStudentIds.includes(student.id) || false;
+      const value = isAbsent ? 'A' : 'P';
+      const styleId = isAbsent ? 'Absent' : 'Present';
+      attendanceCells.push(`        <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${value}</Data></Cell>`);
+      if (!isAbsent) totalPresent++;
+    });
+
+    const percentage = totalClasses > 0 ? ((totalPresent / totalClasses) * 100) : 100;
+    const isDetained = percentage < 75;
+    const statusStyleId = isDetained ? 'Detained' : 'OK';
+
+    tableXML += '      <Row>\n';
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="Number">${index + 1}</Data></Cell>\n`;
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXML(student.rollNumber)}</Data></Cell>\n`;
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXML(student.name)}</Data></Cell>\n`;
+    tableXML += attendanceCells.join('\n') + '\n';
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="Number">${totalPresent}</Data></Cell>\n`;
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${percentage.toFixed(2)}%</Data></Cell>\n`;
+    tableXML += `        <Cell ss:StyleID="${statusStyleId}"><Data ss:Type="String">${isDetained ? 'DETAINED' : 'OK'}</Data></Cell>\n`;
+    tableXML += '      </Row>\n';
+  });
+
+  tableXML += '    </Table>';
+
+  return tableXML;
+};
+
+/**
+ * Helper to escape XML special characters
+ */
+const escapeXML = (str: string): string => {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+};
+
+/**
+ * Generate attendance table for a single class (with optional filtering)
+ * @param classId - The class ID
+ * @param filterDetainedOnly - If true, only include detained students
+ */
+const generateClassAttendanceSheetFiltered = async (classId: string, filterDetainedOnly: boolean): Promise<string> => {
+  const classInfo = await getClassById(classId);
+  let students = await getStudentsByClass(classId, true); // Sort by roll
+  const attendanceRecords = await getAttendanceByClass(classId);
+
+  // If no attendance records, create a simple message
+  if (attendanceRecords.length === 0) {
+    const className = classInfo?.name || 'Class';
+    return `    <Table>
+      <Row>
+        <Cell><Data ss:Type="String">${className}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">No attendance records found.</Data></Cell>
+      </Row>
+    </Table>`;
+  }
+
+  // Sort attendance records by date
+  const sortedRecords = [...attendanceRecords].sort((a, b) => a.date.localeCompare(b.date));
+  const dates = sortedRecords.map(r => r.date);
+  const totalClasses = dates.length;
+
+  // Filter students if detained-only export is requested
+  if (filterDetainedOnly) {
+    students = students.filter(student => {
+      const totalAbsent = sortedRecords.filter(record =>
+        record.absentStudentIds.includes(student.id)
+      ).length;
+      const totalPresent = totalClasses - totalAbsent;
+      const percentage = totalClasses > 0 ? (totalPresent / totalClasses) * 100 : 100;
+      return percentage < 75; // Only include detained students
+    });
+  }
+
+  // If no students after filtering, show message
+  if (students.length === 0) {
+    const className = classInfo?.name || 'Class';
+    return `    <Table>
+      <Row>
+        <Cell><Data ss:Type="String">${className}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">No detained students in this class.</Data></Cell>
+      </Row>
+    </Table>`;
+  }
+
+  const className = classInfo?.name || 'Class';
+  const subject = classInfo?.subject || '';
+  const session = getSessionFromDates(dates);
+
+  // Build XML table
+  let tableXML = '    <Table>\n';
+
+  // Header rows
+  tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
+          <Data ss:Type="String">Attendance  ${className}</Data>
+        </Cell>
+      </Row>\n`;
+
+  tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
+          <Data ss:Type="String">${session}</Data>
+        </Cell>
+      </Row>\n`;
+
+  if (subject) {
+    tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
+          <Data ss:Type="String">${subject}</Data>
+        </Cell>
+      </Row>\n`;
+  }
+
+  tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
+          <Data ss:Type="String">Total Classes: ${totalClasses}</Data>
+        </Cell>
+      </Row>\n`;
+
+  // Empty row
+  tableXML += `      <Row></Row>\n`;
+
+  // Column headers
+  tableXML += '      <Row>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">S No.</Data></Cell>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Roll No.</Data></Cell>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Name</Data></Cell>\n';
+
+  dates.forEach(date => {
+    const d = new Date(date);
+    const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+    tableXML += `        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">${dateStr}</Data></Cell>\n`;
+  });
+
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Total</Data></Cell>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Attendance %</Data></Cell>\n';
+  tableXML += '        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Status</Data></Cell>\n';
+  tableXML += '      </Row>\n';
+
+  // Data rows
+  students.forEach((student, index) => {
+    let totalPresent = 0;
+
+    // Calculate attendance
+    const attendanceCells: string[] = [];
+    dates.forEach(date => {
+      const record = sortedRecords.find(r => r.date === date);
+      const isAbsent = record?.absentStudentIds.includes(student.id) || false;
+      const value = isAbsent ? 'A' : 'P';
+      const styleId = isAbsent ? 'Absent' : 'Present';
+      attendanceCells.push(`        <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${value}</Data></Cell>`);
+      if (!isAbsent) totalPresent++;
+    });
+
+    const percentage = totalClasses > 0 ? ((totalPresent / totalClasses) * 100) : 100;
+    const isDetained = percentage < 75;
+    const statusStyleId = isDetained ? 'Detained' : 'OK';
+
+    tableXML += '      <Row>\n';
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="Number">${index + 1}</Data></Cell>\n`;
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXML(student.rollNumber)}</Data></Cell>\n`;
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXML(student.name)}</Data></Cell>\n`;
+    tableXML += attendanceCells.join('\n') + '\n';
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="Number">${totalPresent}</Data></Cell>\n`;
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${percentage.toFixed(2)}%</Data></Cell>\n`;
+    tableXML += `        <Cell ss:StyleID="${statusStyleId}"><Data ss:Type="String">${isDetained ? 'DETAINED' : 'OK'}</Data></Cell>\n`;
+    tableXML += '      </Row>\n';
+  });
+
+  tableXML += '    </Table>';
+
+  return tableXML;
+};
+
+/**
+ * Export all classes to a single multi-sheet XLS file
+ * @param filterDetainedOnly - If true, only export detained students in each sheet
+ */
+export const exportAllClassesToXLS = async (filterDetainedOnly: boolean = false): Promise<{
+  xls: string;
+  filename: string;
+}> => {
+  // Get all classes
+  const classes = await getClasses();
+
+  if (classes.length === 0) {
+    throw new Error('No classes to export');
+  }
+
+  // Start workbook with XML declaration and styles
+  let workbookContent = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+
+  <Styles>
+    <Style ss:ID="Header">
+      <Font ss:FontName="Times New Roman" ss:Size="16" ss:Bold="1" ss:Color="#1a73e8"/>
+    </Style>
+    <Style ss:ID="ColumnHeader">
+      <Font ss:FontName="Times New Roman" ss:Bold="1"/>
+      <Interior ss:Color="#e8f0fe" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="DataCell">
+      <Font ss:FontName="Times New Roman"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="Present">
+      <Font ss:FontName="Times New Roman" ss:Color="#137333"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="Absent">
+      <Font ss:FontName="Times New Roman" ss:Color="#c5221f"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="Detained">
+      <Font ss:FontName="Times New Roman" ss:Color="#c5221f" ss:Bold="1"/>
+      <Interior ss:Color="#fce8e6" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="OK">
+      <Font ss:FontName="Times New Roman" ss:Color="#137333"/>
+      <Interior ss:Color="#e6f4ea" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+  </Styles>
+`;
+
+  // Track used sheet names to handle duplicates
+  const usedSheetNames = new Set<string>();
+
+  // For each class, create a worksheet
+  for (const cls of classes) {
+    // Generate unique sheet name
+    const sheetName = sanitizeSheetName(cls.name, usedSheetNames);
+
+    // Get attendance data for this class (with filtering if needed)
+    const sheetData = await generateClassAttendanceSheetFiltered(cls.id, filterDetainedOnly);
+
+    // Add worksheet to workbook
+    workbookContent += `
+  <Worksheet ss:Name="${escapeXML(sheetName)}">
+${sheetData}
+  </Worksheet>
+`;
+  }
+
+  // Close workbook
+  workbookContent += `</Workbook>`;
+
+  // Generate filename
+  const today = new Date();
+  const dateStr = `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}-${today.getFullYear()}`;
+  const filenameSuffix = filterDetainedOnly ? '_Detained' : '';
+  const filename = `All_Classes_Attendance${filenameSuffix}_${dateStr}.xls`;
+
+  return { xls: workbookContent, filename };
 };
 
 // ============ DATA MANAGEMENT ============

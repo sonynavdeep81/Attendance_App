@@ -52,9 +52,18 @@ export const ClassStatsScreen: React.FC<Props> = ({ route }) => {
       return;
     }
 
+    // Check if filtering for detained only but none exist
+    if (showDetainedOnly && detainedCount === 0) {
+      Alert.alert(
+        'No Detained Students',
+        'There are no detained students to export. All students have attendance ≥75%.'
+      );
+      return;
+    }
+
     setExporting(true);
     try {
-      const { csv: xlsContent, filename } = await exportClassAttendanceToCSV(classId);
+      const { csv: xlsContent, filename } = await exportClassAttendanceToCSV(classId, showDetainedOnly);
 
       if (Platform.OS === 'web') {
         // Web: Create download as XLS file
@@ -171,7 +180,7 @@ export const ClassStatsScreen: React.FC<Props> = ({ route }) => {
             disabled={exporting}
           >
             <Text style={styles.exportButtonText}>
-              {exporting ? '⏳' : '📤'} Export
+              {exporting ? '⏳ Exporting...' : showDetainedOnly ? '📤 Detained' : '📤 Export'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -195,14 +204,16 @@ export const ClassStatsScreen: React.FC<Props> = ({ route }) => {
         </View>
       </View>
 
-      {/* Filter - only show when attendance exists */}
-      {totalClasses > 0 && detainedCount > 0 && (
+      {/* Filter - show when attendance exists */}
+      {totalClasses > 0 && (
         <TouchableOpacity
           style={styles.filterButton}
           onPress={() => setShowDetainedOnly(!showDetainedOnly)}
         >
           <Text style={styles.filterButtonText}>
-            {showDetainedOnly ? 'Show All Students' : `Show Detained Only (${detainedCount})`}
+            {showDetainedOnly
+              ? `Show All Students (${totalStudents})`
+              : `Show Detained Only (${detainedCount})`}
           </Text>
         </TouchableOpacity>
       )}

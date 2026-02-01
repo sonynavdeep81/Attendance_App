@@ -6,11 +6,15 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  Alert,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { Class, RootStackParamList } from '../types';
-import { getClasses, deleteClass, getStudentsByClass, getAttendanceByClass } from '../utils/storage';
+import { getClasses, deleteClass, getStudentsByClass, getAttendanceByClass, exportAllClassesToXLS } from '../utils/storage';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
 type Props = {
@@ -22,6 +26,7 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
   const [classInfo, setClassInfo] = useState<{ [key: string]: { students: number; classes: number } }>({});
   const [refreshing, setRefreshing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Class | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadClasses = useCallback(async () => {
     const data = await getClasses();
@@ -37,11 +42,102 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
     setClassInfo(info);
   }, []);
 
+  const performExport = useCallback(async (filterDetainedOnly: boolean) => {
+    setExporting(true);
+    try {
+      const { xls: xlsContent, filename } = await exportAllClassesToXLS(filterDetainedOnly);
+
+      if (Platform.OS === 'web') {
+        // Web: Create download
+        const blob = new Blob([xlsContent], { type: 'application/vnd.ms-excel' });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        Alert.alert('Export Successful', `File "${filename}" downloaded!`);
+      } else {
+        // Mobile: Save and share
+        const fileUri = FileSystem.documentDirectory + filename;
+        await FileSystem.writeAsStringAsync(fileUri, xlsContent, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'application/vnd.ms-excel',
+            dialogTitle: 'Save Attendance File',
+            UTI: 'com.microsoft.excel.xls',
+          });
+        } else {
+          Alert.alert('Success', `File saved to: ${fileUri}`);
+        }
+      }
+    } catch (error) {
+      console.error('Export all error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export attendance data.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+
+  const handleExportAll = useCallback(() => {
+    if (classes.length === 0) {
+      Alert.alert('No Classes', 'There are no classes to export.');
+      return;
+    }
+
+    // Show options: All Students or Detained Only
+    Alert.alert(
+      'Export Attendance',
+      'Choose which students to export:',
+      [
+        {
+          text: 'All Students',
+          onPress: () => performExport(false),
+        },
+        {
+          text: 'Detained Only',
+          onPress: () => performExport(true),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
+  }, [classes, performExport]);
+
   useFocusEffect(
     useCallback(() => {
       loadClasses();
     }, [loadClasses])
   );
+
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={handleExportAll}
+          disabled={exporting}
+        >
+          <Text style={styles.headerButtonText}>
+            {exporting ? '⏳' : '📤 Export All'}
+          </Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, exporting, handleExportAll]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -254,5 +350,15 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: '#fff',
     lineHeight: 36,
+  },
+  headerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+  },
+  headerButtonText: {
+    color: '#4A90D9',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

@@ -163,50 +163,55 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
         </View>
       </View>
 
-      {/* Action buttons */}
+      {/* Action buttons - 2x2 Grid */}
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.primaryAction]}
-          onPress={() => navigation.navigate('TakeAttendance', { classId, date: getTodayDate() })}
-        >
-          <Text style={styles.actionButtonText} numberOfLines={1}>📋 Attendance</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.secondaryAction]}
-          onPress={() => navigation.navigate('AttendanceHistory', { classId })}
-        >
-          <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📅 History</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.secondaryAction]}
-          onPress={() => navigation.navigate('ClassStats', { classId })}
-        >
-          <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📊 Stats</Text>
-        </TouchableOpacity>
+        {/* Row 1 */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.primaryAction]}
+            onPress={() => navigation.navigate('TakeAttendance', { classId, date: getTodayDate() })}
+          >
+            <Text style={styles.actionButtonText} numberOfLines={1}>📋 Attendance</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.secondaryAction]}
+            onPress={() => navigation.navigate('AttendanceHistory', { classId })}
+          >
+            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📅 History</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Row 2 */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.secondaryAction]}
+            onPress={() => navigation.navigate('ClassStats', { classId })}
+          >
+            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📊 Stats</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.secondaryAction]}
+            onPress={() => navigation.navigate('BulkAddStudents', { classId })}
+          >
+            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📋 Bulk Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Student list */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Students</Text>
-        <View style={styles.headerButtons}>
+        {students.length > 0 && (
           <TouchableOpacity
-            style={styles.bulkAddButton}
-            onPress={() => navigation.navigate('BulkAddStudents', { classId })}
+            style={[styles.bulkAddButton, selectionMode && styles.activeButton]}
+            onPress={() => {
+              setSelectionMode(!selectionMode);
+              setSelectedStudents(new Set());
+            }}
           >
-            <Text style={styles.bulkAddButtonText}>📋 Bulk Add</Text>
+            <Text style={styles.bulkAddButtonText}>{selectionMode ? '✖️ Cancel' : '☑️ Select'}</Text>
           </TouchableOpacity>
-          {students.length > 0 && (
-            <TouchableOpacity
-              style={[styles.bulkAddButton, selectionMode && styles.activeButton]}
-              onPress={() => {
-                setSelectionMode(!selectionMode);
-                setSelectedStudents(new Set());
-              }}
-            >
-              <Text style={styles.bulkAddButtonText}>{selectionMode ? '✖️ Cancel' : '☑️ Select'}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        )}
       </View>
 
       {/* Selection mode controls */}
@@ -329,11 +334,14 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
   },
   actions: {
-    flexDirection: 'row',
     padding: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
   },
   actionButton: {
     flex: 1,
