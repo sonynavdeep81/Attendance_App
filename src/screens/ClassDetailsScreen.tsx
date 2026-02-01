@@ -123,8 +123,8 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
         </TouchableOpacity>
       )}
       <View style={styles.studentInfo}>
-        <Text style={styles.rollNumber}>{item.rollNumber}</Text>
-        <Text style={styles.studentName}>{item.name}</Text>
+        <Text style={styles.rollNumber} numberOfLines={1}>{item.rollNumber}</Text>
+        <Text style={styles.studentName} numberOfLines={1}>{item.name}</Text>
       </View>
       {!selectionMode && (
         <>
@@ -169,19 +169,19 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           style={[styles.actionButton, styles.primaryAction]}
           onPress={() => navigation.navigate('TakeAttendance', { classId, date: getTodayDate() })}
         >
-          <Text style={styles.actionButtonText}>📋 Take Attendance</Text>
+          <Text style={styles.actionButtonText} numberOfLines={1}>📋 Attendance</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.secondaryAction]}
           onPress={() => navigation.navigate('AttendanceHistory', { classId })}
         >
-          <Text style={[styles.actionButtonText, styles.secondaryActionText]}>📅 History</Text>
+          <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📅 History</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.secondaryAction]}
           onPress={() => navigation.navigate('ClassStats', { classId })}
         >
-          <Text style={[styles.actionButtonText, styles.secondaryActionText]}>📊 Stats</Text>
+          <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📊 Stats</Text>
         </TouchableOpacity>
       </View>
 
@@ -352,6 +352,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#fff',
+    lineHeight: 20,           // Explicit line height for consistent vertical spacing
+    textAlign: 'center',      // Ensure text is centered
+    includeFontPadding: false, // Android: Remove extra font padding
   },
   secondaryActionText: {
     color: '#333',
@@ -471,7 +474,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#4A90D9',
-    width: 50,
+    width: 80,
+    flexShrink: 0,
   },
   studentName: {
     fontSize: 16,
