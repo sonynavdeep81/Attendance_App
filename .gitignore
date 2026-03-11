@@ -57,3 +57,6 @@ include/
 pyvenv.cfg
 __pycache__/
 *.py[cod]
+
+# Build logs
+build.log

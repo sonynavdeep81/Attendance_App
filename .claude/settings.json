@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run*)",
+      "Bash(npm install*)",
+      "Bash(npx tsc*)",
+      "Bash(npx expo*)",
+      "Bash(eas*)",
+      "Bash(git add:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:github.com)"
+    ],
+    "deny": [
+      "Bash(rm -rf*)"
+    ],
+    "ask": [
+      "Bash(git push*)"
+    ]
+  }
+}
