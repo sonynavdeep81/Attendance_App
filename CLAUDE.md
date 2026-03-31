@@ -28,7 +28,9 @@ npm run web            # Browser
 npx tsc --noEmit       # TypeScript check — run after every change
 ```
 
-## Building the APK (local)
+## Building the APK
+Always use the local Gradle build. Do NOT use EAS cloud build or Expo Go.
+
 ```bash
 # 1. Bundle JS assets
 npx expo export --platform android
