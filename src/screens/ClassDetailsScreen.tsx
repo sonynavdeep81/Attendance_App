@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#4A90D9',
-    width: 80,
+    width: 130,
     flexShrink: 0,
   },
   studentName: {
