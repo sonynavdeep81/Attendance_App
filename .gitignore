@@ -18,6 +18,8 @@ web-build/
 
 # Metro
 .metro-health-check*
+metro-cache/
+metro-file-map-*
 
 # Debug
 npm-debug.*
