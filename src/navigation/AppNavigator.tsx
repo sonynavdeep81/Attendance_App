@@ -14,6 +14,8 @@ import {
   AttendanceHistoryScreen,
   ClassStatsScreen,
   StatisticsScreen,
+  ClassRemarksScreen,
+  StudentAttendanceScreen,
 } from '../screens';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -126,6 +128,16 @@ export const AppNavigator = () => {
           name="ClassStats"
           component={ClassStatsScreen}
           options={{ title: 'Class Statistics' }}
+        />
+        <Stack.Screen
+          name="ClassRemarks"
+          component={ClassRemarksScreen}
+          options={{ title: 'Remarks' }}
+        />
+        <Stack.Screen
+          name="StudentAttendance"
+          component={StudentAttendanceScreen}
+          options={{ title: 'Student Attendance' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

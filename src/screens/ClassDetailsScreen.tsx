@@ -122,10 +122,13 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           </Text>
         </TouchableOpacity>
       )}
-      <View style={styles.studentInfo}>
+      <TouchableOpacity
+        style={styles.studentInfo}
+        onPress={() => !selectionMode && navigation.navigate('StudentAttendance', { classId, studentId: item.id })}
+      >
         <Text style={styles.rollNumber} numberOfLines={1}>{item.rollNumber}</Text>
         <Text style={styles.studentName} numberOfLines={1}>{item.name}</Text>
-      </View>
+      </TouchableOpacity>
       {!selectionMode && (
         <>
           <TouchableOpacity
@@ -195,6 +198,17 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           >
             <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📋 Bulk Add</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Row 3 */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.secondaryAction]}
+            onPress={() => navigation.navigate('ClassRemarks', { classId })}
+          >
+            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📝 Remarks</Text>
+          </TouchableOpacity>
+          <View style={[styles.actionButton, { backgroundColor: 'transparent' }]} />
         </View>
       </View>
 

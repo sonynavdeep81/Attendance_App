@@ -7,3 +7,5 @@ export { TakeAttendanceScreen } from './TakeAttendanceScreen';
 export { AttendanceHistoryScreen } from './AttendanceHistoryScreen';
 export { ClassStatsScreen } from './ClassStatsScreen';
 export { StatisticsScreen } from './StatisticsScreen';
+export { ClassRemarksScreen } from './ClassRemarksScreen';
+export { StudentAttendanceScreen } from './StudentAttendanceScreen';

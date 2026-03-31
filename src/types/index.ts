@@ -4,6 +4,15 @@ export interface Class {
   id: string;
   name: string;
   subject?: string;
+  subjectCode?: string;
+  createdAt: string;
+}
+
+export interface ClassRemark {
+  id: string;
+  classId: string;
+  date: string; // YYYY-MM-DD format
+  remark: string;
   createdAt: string;
 }
 
@@ -56,6 +65,8 @@ export type RootStackParamList = {
   AttendanceHistory: { classId: string };
   EditAttendance: { classId: string; date: string };
   ClassStats: { classId: string };
+  ClassRemarks: { classId: string };
+  StudentAttendance: { classId: string; studentId: string };
 };
 
 export type MainTabParamList = {
