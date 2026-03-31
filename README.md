@@ -16,6 +16,7 @@ A React Native (Expo) app for managing student attendance on Android.
   - Per-student attendance stats (Total Present, Total Absent, Total Classes)
   - Attendance percentage calculation
   - **Detention Detection**: Highlights students with less than 75% attendance
+- ✅ **Student Attendance Detail**: Tap any student to view day-wise attendance with present/absent toggle filter and summary totals
 - ✅ **Data Persistence**: All data stored locally on device using AsyncStorage
 
 ## How to Use
@@ -32,6 +33,13 @@ A React Native (Expo) app for managing student attendance on Android.
 1. Open a class by tapping on it
 2. Tap the **+** button to add students
 3. Long-press on a student to edit or delete
+
+### Viewing a Student's Attendance
+
+1. Open a class and tap any student's **roll number or name**
+2. See day-wise attendance (date + Present/Absent) in chronological order
+3. Summary at the top shows: Total Lectures, Present, Absent, and Attendance %
+4. Toggle **"Show absent only"** to filter and view only absent days
 
 ### Taking Attendance
 
@@ -58,7 +66,9 @@ A React Native (Expo) app for managing student attendance on Android.
 
 ## Installation on Android Phone
 
-### Option 1: Using Expo Go (Easiest - For Testing)
+### Build APK (Local Gradle Build)
+
+Requires Android SDK installed on your machine.
 
 1. Install dependencies:
 
@@ -66,63 +76,25 @@ A React Native (Expo) app for managing student attendance on Android.
    npm install
    ```
 
-2. Start the development server:
+2. Bundle JS assets:
 
    ```bash
-   npx expo start
+   npx expo export --platform android
    ```
 
-3. Install **Expo Go** app from Google Play Store on your phone
-
-4. Scan the QR code shown in the terminal with Expo Go
-
-### Option 2: Build APK (For Permanent Installation)
-
-1. Install EAS CLI globally:
+3. Build release APK:
 
    ```bash
-   npm install -g eas-cli
+   cd android && ./gradlew assembleRelease
    ```
 
-2. Login to Expo (create free account at expo.dev):
+4. Copy APK to project root:
 
    ```bash
-   eas login
+   cp android/app/build/outputs/apk/release/app-release.apk StudentAttendance.apk
    ```
 
-3. Configure the project:
-
-   ```bash
-   eas build:configure
-   ```
-
-4. Build the APK:
-
-   ```bash
-   eas build -p android --profile preview
-   ```
-
-5. Once build completes, download the APK from the link provided
-
-6. Transfer APK to your phone and install it (enable "Install from unknown sources" in settings)
-
-### Option 3: Local APK Build (No Expo Account Needed)
-
-1. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-2. Build locally (requires Android SDK):
-
-   ```bash
-   npx expo prebuild
-   cd android
-   ./gradlew assembleRelease
-   ```
-
-3. Find APK at: `android/app/build/outputs/apk/release/app-release.apk`
+5. Transfer `StudentAttendance.apk` to your phone and install it (enable "Install from unknown sources" in settings)
 
 ## Project Structure
 
