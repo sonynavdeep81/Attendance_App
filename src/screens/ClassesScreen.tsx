@@ -8,13 +8,16 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  InteractionManager,
+  Modal,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 import { Class, RootStackParamList } from '../types';
-import { getClasses, deleteClass, getStudentsByClass, getAttendanceByClass, exportAllClassesToXLS } from '../utils/storage';
+import { getClasses, deleteClass, getStudentsByClass, getAttendanceByClass, exportAllClassesToXLS, exportAllDetaineeLists, exportData, importData, clearAllData } from '../utils/storage';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
 type Props = {
@@ -27,19 +30,25 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Class | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const loadClasses = useCallback(async () => {
     const data = await getClasses();
     setClasses(data);
 
-    // Load additional info for each class
-    const info: { [key: string]: { students: number; classes: number } } = {};
-    for (const cls of data) {
-      const students = await getStudentsByClass(cls.id);
-      const attendance = await getAttendanceByClass(cls.id);
-      info[cls.id] = { students: students.length, classes: attendance.length };
-    }
-    setClassInfo(info);
+    // Load additional info for each class in parallel
+    const infoEntries = await Promise.all(
+      data.map(async (cls) => {
+        const [students, attendance] = await Promise.all([
+          getStudentsByClass(cls.id),
+          getAttendanceByClass(cls.id),
+        ]);
+        return [cls.id, { students: students.length, classes: attendance.length }] as const;
+      })
+    );
+    setClassInfo(Object.fromEntries(infoEntries));
   }, []);
 
   const performExport = useCallback(async (filterDetainedOnly: boolean) => {
@@ -89,55 +98,246 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, []);
 
+  const performDetaineeExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const { xls: xlsContent, filename } = await exportAllDetaineeLists();
+
+      if (Platform.OS === 'web') {
+        const blob = new Blob([xlsContent], { type: 'application/vnd.ms-excel' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        Alert.alert('Export Successful', `File "${filename}" downloaded!`);
+      } else {
+        const fileUri = FileSystem.documentDirectory + filename;
+        await FileSystem.writeAsStringAsync(fileUri, xlsContent, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'application/vnd.ms-excel',
+            dialogTitle: 'Save Detainee List',
+            UTI: 'com.microsoft.excel.xls',
+          });
+        } else {
+          Alert.alert('Success', `File saved to: ${fileUri}`);
+        }
+      }
+    } catch (error) {
+      console.error('Detainee list export error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export detainee list.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+
+  const performBackup = useCallback(async () => {
+    setExporting(true);
+    try {
+      const jsonData = await exportData();
+      const today = new Date();
+      const dateStr = `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getFullYear()}`;
+      const filename = `Attendance_Backup_${dateStr}.json`;
+
+      if (Platform.OS === 'web') {
+        const blob = new Blob([jsonData], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        Alert.alert('Backup Successful', `File "${filename}" downloaded!`);
+      } else {
+        const fileUri = FileSystem.documentDirectory + filename;
+        await FileSystem.writeAsStringAsync(fileUri, jsonData, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'application/json',
+            dialogTitle: 'Save Backup File',
+          });
+        } else {
+          Alert.alert('Success', `Backup saved to: ${fileUri}`);
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create backup.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+
+  const performRestoreFromBackup = useCallback(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', '*/*'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets[0];
+      if (!file || !file.uri) return;
+
+      setImporting(true);
+
+      let content: string;
+      if (Platform.OS === 'web') {
+        const response = await fetch(file.uri);
+        content = await response.text();
+      } else {
+        content = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+      }
+
+      let data: any;
+      try {
+        data = JSON.parse(content);
+      } catch {
+        Alert.alert('Invalid File', 'Please select a JSON backup file generated by this app.');
+        return;
+      }
+
+      if (!data.classes || !data.students || !data.attendance) {
+        Alert.alert('Invalid File', 'Please select a JSON backup file generated by this app.');
+        return;
+      }
+
+      Alert.alert(
+        'Restore Backup',
+        'This will replace all current data (classes, students, attendance, holidays, schedule, cancellations) with the backup. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await importData(content);
+                loadClasses();
+                Alert.alert('Success', 'All data restored from backup.');
+              } catch {
+                Alert.alert('Error', 'Failed to restore backup.');
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to read backup file.');
+    } finally {
+      setImporting(false);
+    }
+  }, [loadClasses]);
+
+  const performFullReset = useCallback(() => {
+    Alert.alert(
+      '⚠️ Full Reset',
+      'This will permanently delete ALL data — classes, students, attendance, holidays, schedules, and remarks. This cannot be undone.\n\nAre you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Delete Everything',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Final Confirmation',
+              'Last chance. All your data will be gone forever. Proceed?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'RESET',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await clearAllData();
+                      loadClasses();
+                      Alert.alert('Done', 'All data has been cleared.');
+                    } catch {
+                      Alert.alert('Error', 'Failed to reset data.');
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  }, [loadClasses]);
+
   const handleExportAll = useCallback(() => {
     if (classes.length === 0) {
       Alert.alert('No Classes', 'There are no classes to export.');
       return;
     }
+    setShowExportModal(true);
+  }, [classes]);
 
-    // Show options: All Students or Detained Only
-    Alert.alert(
-      'Export Attendance',
-      'Choose which students to export:',
-      [
-        {
-          text: 'All Students',
-          onPress: () => performExport(false),
-        },
-        {
-          text: 'Detained Only',
-          onPress: () => performExport(true),
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ],
-      { cancelable: true }
-    );
-  }, [classes, performExport]);
+  const handleImport = useCallback(() => {
+    setShowImportModal(true);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadClasses();
+      const task = InteractionManager.runAfterInteractions(() => {
+        loadClasses();
+      });
+      return () => task.cancel();
     }, [loadClasses])
   );
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity
-          style={styles.headerButton}
-          onPress={handleExportAll}
-          disabled={exporting}
-        >
-          <Text style={styles.headerButtonText}>
-            {exporting ? '⏳' : '📤 Export All'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => navigation.navigate('Holidays')}
+          >
+            <Text style={styles.headerButtonText}>🗓️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={handleImport}
+            disabled={importing}
+          >
+            <Text style={styles.headerButtonText}>
+              {importing ? '⏳' : '📥'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={handleExportAll}
+            disabled={exporting}
+          >
+            <Text style={styles.headerButtonText}>
+              {exporting ? '⏳' : '📤'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       ),
     });
-  }, [navigation, exporting, handleExportAll]);
+  }, [navigation, exporting, handleExportAll, importing, handleImport]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -220,6 +420,48 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
       >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
+
+      {/* Export Modal */}
+      <Modal visible={showExportModal} transparent animationType="fade" onRequestClose={() => setShowExportModal(false)}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowExportModal(false)}>
+          <View style={styles.menuSheet}>
+            <Text style={styles.menuTitle}>Export / Backup</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowExportModal(false); performExport(false); }}>
+              <Text style={styles.menuItemText}>All Students (XLS)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowExportModal(false); performExport(true); }}>
+              <Text style={styles.menuItemText}>Detained Only (XLS)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowExportModal(false); performDetaineeExport(); }}>
+              <Text style={styles.menuItemText}>Detainee List (XLS)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowExportModal(false); performBackup(); }}>
+              <Text style={styles.menuItemText}>Full Backup (JSON)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.menuItem, styles.menuCancel]} onPress={() => setShowExportModal(false)}>
+              <Text style={styles.menuCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Import Modal */}
+      <Modal visible={showImportModal} transparent animationType="fade" onRequestClose={() => setShowImportModal(false)}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowImportModal(false)}>
+          <View style={styles.menuSheet}>
+            <Text style={styles.menuTitle}>Import / Restore</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowImportModal(false); performRestoreFromBackup(); }}>
+              <Text style={styles.menuItemText}>Restore JSON Backup</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowImportModal(false); performFullReset(); }}>
+              <Text style={[styles.menuItemText, styles.menuItemDestructive]}>⚠️ Full Reset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.menuItem, styles.menuCancel]} onPress={() => setShowImportModal(false)}>
+              <Text style={styles.menuCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <ConfirmDialog
         visible={deleteTarget !== null}
@@ -351,10 +593,56 @@ const styles = StyleSheet.create({
     color: '#fff',
     lineHeight: 36,
   },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  menuSheet: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  menuTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  menuItem: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  menuItemDestructive: {
+    color: '#d32f2f',
+  },
+  menuCancel: {
+    borderBottomWidth: 0,
+    backgroundColor: '#f5f5f5',
+  },
+  menuCancelText: {
+    fontSize: 16,
+    color: '#888',
+    textAlign: 'center',
+  },
+  headerButtons: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
   headerButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    marginRight: 8,
+    marginRight: 4,
   },
   headerButtonText: {
     color: '#4A90D9',

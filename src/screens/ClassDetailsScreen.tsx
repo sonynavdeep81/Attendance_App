@@ -208,7 +208,12 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           >
             <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📝 Remarks</Text>
           </TouchableOpacity>
-          <View style={[styles.actionButton, { backgroundColor: 'transparent' }]} />
+          <TouchableOpacity
+            style={[styles.actionButton, styles.secondaryAction]}
+            onPress={() => navigation.navigate('ClassSchedule', { classId })}
+          >
+            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📅 Schedule</Text>
+          </TouchableOpacity>
         </View>
       </View>
 

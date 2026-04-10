@@ -31,6 +31,7 @@ export const AddEditClassScreen: React.FC<Props> = (props) => {
 
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
+  const [subjectCode, setSubjectCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -45,22 +46,23 @@ export const AddEditClassScreen: React.FC<Props> = (props) => {
     if (classData) {
       setName(classData.name);
       setSubject(classData.subject || '');
+      setSubjectCode(classData.subjectCode || '');
     }
   };
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert('Error', 'Please enter a class name');
+    if (!name.trim() || !subject.trim() || !subjectCode.trim()) {
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     setLoading(true);
     try {
       if (isEdit && classId) {
-        await updateClass(classId, name.trim(), subject.trim() || undefined);
+        await updateClass(classId, name.trim(), subject.trim() || undefined, subjectCode.trim() || undefined);
         Alert.alert('Success', 'Class updated successfully');
       } else {
-        await addClass(name.trim(), subject.trim() || undefined);
+        await addClass(name.trim(), subject.trim() || undefined, subjectCode.trim() || undefined);
         Alert.alert('Success', 'Class added successfully');
       }
       props.navigation.goBack();
@@ -86,12 +88,21 @@ export const AddEditClassScreen: React.FC<Props> = (props) => {
           placeholderTextColor="#999"
         />
 
-        <Text style={styles.label}>Subject (Optional)</Text>
+        <Text style={styles.label}>Subject</Text>
         <TextInput
           style={styles.input}
           value={subject}
           onChangeText={setSubject}
           placeholder="e.g., Mathematics"
+          placeholderTextColor="#999"
+        />
+
+        <Text style={styles.label}>Subject Code</Text>
+        <TextInput
+          style={styles.input}
+          value={subjectCode}
+          onChangeText={setSubjectCode}
+          placeholder="e.g., CS-101"
           placeholderTextColor="#999"
         />
 

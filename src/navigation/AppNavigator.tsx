@@ -16,6 +16,8 @@ import {
   StatisticsScreen,
   ClassRemarksScreen,
   StudentAttendanceScreen,
+  ClassScheduleScreen,
+  HolidaysScreen,
 } from '../screens';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -138,6 +140,16 @@ export const AppNavigator = () => {
           name="StudentAttendance"
           component={StudentAttendanceScreen}
           options={{ title: 'Student Attendance' }}
+        />
+        <Stack.Screen
+          name="ClassSchedule"
+          component={ClassScheduleScreen}
+          options={{ title: 'Class Schedule' }}
+        />
+        <Stack.Screen
+          name="Holidays"
+          component={HolidaysScreen}
+          options={{ title: 'Global Holidays' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

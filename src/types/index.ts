@@ -1,10 +1,32 @@
 // Type definitions for the Student Attendance App
 
+export interface SchedulePeriod {
+  days: string[]; // e.g. ["Monday", "Tuesday", "Thursday"]
+  startDate: string; // YYYY-MM-DD — effective from this date onwards
+}
+
 export interface Class {
   id: string;
   name: string;
   subject?: string;
   subjectCode?: string;
+  createdAt: string;
+  schedulePeriods?: SchedulePeriod[];
+}
+
+export interface Holiday {
+  id: string;
+  date: string;    // YYYY-MM-DD — start date (or the only date for single-day holidays)
+  endDate?: string; // YYYY-MM-DD — if present, this is a range (e.g. exam period)
+  name: string;
+  createdAt: string;
+}
+
+export interface ClassCancellation {
+  id: string;
+  classId: string;
+  date: string; // YYYY-MM-DD
+  reason?: string;
   createdAt: string;
 }
 
@@ -67,6 +89,8 @@ export type RootStackParamList = {
   ClassStats: { classId: string };
   ClassRemarks: { classId: string };
   StudentAttendance: { classId: string; studentId: string };
+  ClassSchedule: { classId: string };
+  Holidays: undefined;
 };
 
 export type MainTabParamList = {

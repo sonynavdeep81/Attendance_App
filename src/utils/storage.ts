@@ -1,11 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Class, Student, AttendanceRecord, StudentAttendanceStats, ClassAttendanceStats } from '../types';
+import { Class, Student, AttendanceRecord, StudentAttendanceStats, ClassAttendanceStats, ClassRemark, Holiday, ClassCancellation } from '../types';
 
 const STORAGE_KEYS = {
   CLASSES: 'attendance_classes',
   STUDENTS: 'attendance_students',
   ATTENDANCE: 'attendance_records',
   SORT_PREFERENCE: 'attendance_sort_preference',
+  REMARKS: 'attendance_remarks',
+  HOLIDAYS: 'attendance_holidays',
+  CANCELLATIONS: 'attendance_cancellations',
 };
 
 // Helper function to generate unique IDs
@@ -16,7 +19,7 @@ export const generateId = (): string => {
 // Helper function to get today's date in YYYY-MM-DD format
 export const getTodayDate = (): string => {
   const today = new Date();
-  return today.toISOString().split('T')[0];
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 };
 
 // Format date for display
@@ -42,12 +45,13 @@ export const getClasses = async (): Promise<Class[]> => {
   }
 };
 
-export const addClass = async (name: string, subject?: string): Promise<Class> => {
+export const addClass = async (name: string, subject?: string, subjectCode?: string): Promise<Class> => {
   const classes = await getClasses();
   const newClass: Class = {
     id: generateId(),
     name,
     subject,
+    subjectCode,
     createdAt: new Date().toISOString(),
   };
   classes.push(newClass);
@@ -55,11 +59,11 @@ export const addClass = async (name: string, subject?: string): Promise<Class> =
   return newClass;
 };
 
-export const updateClass = async (id: string, name: string, subject?: string): Promise<void> => {
+export const updateClass = async (id: string, name: string, subject?: string, subjectCode?: string): Promise<void> => {
   const classes = await getClasses();
   const index = classes.findIndex((c) => c.id === id);
   if (index !== -1) {
-    classes[index] = { ...classes[index], name, subject };
+    classes[index] = { ...classes[index], name, subject, subjectCode };
     await AsyncStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(classes));
   }
 };
@@ -79,6 +83,16 @@ export const deleteClass = async (id: string): Promise<void> => {
   const attendance = await getAttendanceRecords();
   const filteredAttendance = attendance.filter((a) => a.classId !== id);
   await AsyncStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(filteredAttendance));
+
+  // Delete associated remarks
+  const remarks = await getRemarks();
+  const filteredRemarks = remarks.filter((r) => r.classId !== id);
+  await AsyncStorage.setItem(STORAGE_KEYS.REMARKS, JSON.stringify(filteredRemarks));
+
+  // Delete associated cancellations
+  const cancellations = await getCancellations();
+  const filteredCancellations = cancellations.filter((c) => c.classId !== id);
+  await AsyncStorage.setItem(STORAGE_KEYS.CANCELLATIONS, JSON.stringify(filteredCancellations));
 };
 
 export const getClassById = async (id: string): Promise<Class | undefined> => {
@@ -248,6 +262,209 @@ export const deleteAttendanceRecord = async (classId: string, date: string): Pro
   await AsyncStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(filteredRecords));
 };
 
+// ============ CLASS REMARKS OPERATIONS ============
+
+export const getRemarks = async (): Promise<ClassRemark[]> => {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.REMARKS);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('Error getting remarks:', error);
+    return [];
+  }
+};
+
+export const getRemarksByClass = async (classId: string): Promise<ClassRemark[]> => {
+  const remarks = await getRemarks();
+  return remarks
+    .filter((r) => r.classId === classId)
+    .sort((a, b) => b.date.localeCompare(a.date));
+};
+
+export const addRemark = async (classId: string, date: string, remark: string): Promise<ClassRemark> => {
+  const remarks = await getRemarks();
+  const newRemark: ClassRemark = {
+    id: generateId(),
+    classId,
+    date,
+    remark,
+    createdAt: new Date().toISOString(),
+  };
+  remarks.push(newRemark);
+  await AsyncStorage.setItem(STORAGE_KEYS.REMARKS, JSON.stringify(remarks));
+  return newRemark;
+};
+
+export const updateRemark = async (id: string, date: string, remark: string): Promise<void> => {
+  const remarks = await getRemarks();
+  const index = remarks.findIndex((r) => r.id === id);
+  if (index !== -1) {
+    remarks[index] = { ...remarks[index], date, remark };
+    await AsyncStorage.setItem(STORAGE_KEYS.REMARKS, JSON.stringify(remarks));
+  }
+};
+
+export const deleteRemark = async (id: string): Promise<void> => {
+  const remarks = await getRemarks();
+  const filtered = remarks.filter((r) => r.id !== id);
+  await AsyncStorage.setItem(STORAGE_KEYS.REMARKS, JSON.stringify(filtered));
+};
+
+// ============ HOLIDAY OPERATIONS ============
+
+export const getHolidays = async (): Promise<Holiday[]> => {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.HOLIDAYS);
+    const holidays: Holiday[] = data ? JSON.parse(data) : [];
+    return holidays.sort((a, b) => a.date.localeCompare(b.date));
+  } catch (error) {
+    console.error('Error getting holidays:', error);
+    return [];
+  }
+};
+
+export const addHoliday = async (date: string, name: string, endDate?: string): Promise<Holiday> => {
+  const holidays = await getHolidays();
+  const newHoliday: Holiday = {
+    id: generateId(),
+    date,
+    endDate: endDate && endDate > date ? endDate : undefined,
+    name,
+    createdAt: new Date().toISOString(),
+  };
+  holidays.push(newHoliday);
+  await AsyncStorage.setItem(STORAGE_KEYS.HOLIDAYS, JSON.stringify(holidays));
+  return newHoliday;
+};
+
+export const deleteHoliday = async (id: string): Promise<void> => {
+  const holidays = await getHolidays();
+  const filtered = holidays.filter((h) => h.id !== id);
+  await AsyncStorage.setItem(STORAGE_KEYS.HOLIDAYS, JSON.stringify(filtered));
+};
+
+// ============ CLASS CANCELLATION OPERATIONS ============
+
+export const getCancellations = async (): Promise<ClassCancellation[]> => {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.CANCELLATIONS);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('Error getting cancellations:', error);
+    return [];
+  }
+};
+
+export const getCancellationsByClass = async (classId: string): Promise<ClassCancellation[]> => {
+  const cancellations = await getCancellations();
+  return cancellations
+    .filter((c) => c.classId === classId)
+    .sort((a, b) => a.date.localeCompare(b.date));
+};
+
+export const addCancellation = async (classId: string, date: string, reason?: string): Promise<ClassCancellation> => {
+  const cancellations = await getCancellations();
+  const newCancellation: ClassCancellation = {
+    id: generateId(),
+    classId,
+    date,
+    reason,
+    createdAt: new Date().toISOString(),
+  };
+  cancellations.push(newCancellation);
+  await AsyncStorage.setItem(STORAGE_KEYS.CANCELLATIONS, JSON.stringify(cancellations));
+  return newCancellation;
+};
+
+export const deleteCancellation = async (id: string): Promise<void> => {
+  const cancellations = await getCancellations();
+  const filtered = cancellations.filter((c) => c.id !== id);
+  await AsyncStorage.setItem(STORAGE_KEYS.CANCELLATIONS, JSON.stringify(filtered));
+};
+
+// ============ CLASS SCHEDULE OPERATIONS ============
+
+export const addSchedulePeriod = async (classId: string, days: string[], startDate: string): Promise<void> => {
+  const classes = await getClasses();
+  const index = classes.findIndex((c) => c.id === classId);
+  if (index !== -1) {
+    const existing = classes[index].schedulePeriods || [];
+    classes[index] = {
+      ...classes[index],
+      schedulePeriods: [...existing, { days, startDate }],
+    };
+    await AsyncStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(classes));
+  }
+};
+
+// ============ MISSED DATES CALCULATION ============
+
+const DAY_NAME_TO_INDEX: Record<string, number> = {
+  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+  Thursday: 4, Friday: 5, Saturday: 6,
+};
+
+export const getMissedDates = async (classId: string): Promise<string[]> => {
+  const cls = await getClassById(classId);
+  if (!cls || !cls.schedulePeriods || cls.schedulePeriods.length === 0) return [];
+
+  const attendanceRecords = await getAttendanceByClass(classId);
+  const recordedDates = new Set(attendanceRecords.map((r) => r.date));
+
+  const holidays = await getHolidays();
+  const holidayDates = new Set<string>();
+  for (const h of holidays) {
+    if (h.endDate) {
+      const cur = new Date(h.date + 'T00:00:00');
+      const end = new Date(h.endDate + 'T00:00:00');
+      while (cur <= end) {
+        holidayDates.add(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`);
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else {
+      holidayDates.add(h.date);
+    }
+  }
+
+  const cancellations = await getCancellationsByClass(classId);
+  const cancelledDates = new Set(cancellations.map((c) => c.date));
+
+  const today = getTodayDate();
+  const missedDates: string[] = [];
+
+  const periods = [...cls.schedulePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  for (let p = 0; p < periods.length; p++) {
+    const period = periods[p];
+    const periodEnd = p + 1 < periods.length ? periods[p + 1].startDate : today;
+
+    const scheduledDayIndices = new Set(
+      period.days.map((d) => DAY_NAME_TO_INDEX[d]).filter((i) => i !== undefined)
+    );
+
+    const current = new Date(period.startDate + 'T00:00:00');
+    const end = new Date(periodEnd + 'T00:00:00');
+
+    while (current < end) {
+      const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+      const dayOfWeek = current.getDay();
+
+      if (
+        scheduledDayIndices.has(dayOfWeek) &&
+        !holidayDates.has(dateStr) &&
+        !cancelledDates.has(dateStr) &&
+        !recordedDates.has(dateStr)
+      ) {
+        missedDates.push(dateStr);
+      }
+
+      current.setDate(current.getDate() + 1);
+    }
+  }
+
+  return missedDates.sort();
+};
+
 // ============ STATISTICS CALCULATIONS ============
 
 export const calculateStudentStats = async (classId: string): Promise<StudentAttendanceStats[]> => {
@@ -357,22 +574,24 @@ export const exportClassAttendanceToCSV = async (
   
   const className = classInfo?.name || 'Class';
   const subject = classInfo?.subject || '';
+  const subjectCode = classInfo?.subjectCode || '';
+  const subjectDisplay = [subject, subjectCode].filter(Boolean).join('  |  ');
   const session = getSessionFromDates(dates);
-  
+
   // Calculate total columns for centering effect
   const totalDataColumns = 3 + dates.length + 3; // S.No, Roll, Name, dates..., Total, %, Status
-  
+
   // Create header rows (spanning effect by leaving other cells empty)
   const createCenteredRow = (text: string): string[] => {
     const row = new Array(totalDataColumns).fill('');
     row[0] = text;
     return row;
   };
-  
+
   // Header rows
   const titleRow = createCenteredRow(`Attendance  ${className}`);
   const sessionRow = createCenteredRow(session);
-  const subjectRow = createCenteredRow(subject);
+  const subjectRow = createCenteredRow(subjectDisplay);
   const totalClassesRow = createCenteredRow(`Total Classes: ${totalClasses}`);
   
   // Create column header row
@@ -425,7 +644,7 @@ export const exportClassAttendanceToCSV = async (
 <table>
   <tr><td colspan="${totalCols}" style="font-family: Times New Roman; font-size: 16pt; font-weight: bold; color: #1a73e8;">Attendance  ${className}</td></tr>
   <tr><td colspan="${totalCols}" style="font-family: Times New Roman; font-size: 16pt; font-weight: bold; color: #1a73e8;">${session}</td></tr>
-  <tr><td colspan="${totalCols}" style="font-family: Times New Roman; font-size: 16pt; font-weight: bold; color: #1a73e8;">${subject}</td></tr>
+  <tr><td colspan="${totalCols}" style="font-family: Times New Roman; font-size: 16pt; font-weight: bold; color: #1a73e8;">${subjectDisplay}</td></tr>
   <tr><td colspan="${totalCols}" style="font-family: Times New Roman; font-size: 16pt; font-weight: bold; color: #1a73e8;">Total Classes: ${totalClasses}</td></tr>
   <tr><td colspan="${totalCols}"></td></tr>
   <tr>${headers.map(h => `<td style="font-family: Times New Roman; font-weight: bold; background-color: #e8f0fe; border: 1px solid #000;">${h}</td>`).join('')}</tr>
@@ -519,6 +738,8 @@ const generateClassAttendanceSheet = async (classId: string): Promise<string> =>
 
   const className = classInfo?.name || 'Class';
   const subject = classInfo?.subject || '';
+  const subjectCode = classInfo?.subjectCode || '';
+  const subjectDisplay = [subject, subjectCode].filter(Boolean).join('  |  ');
   const session = getSessionFromDates(dates);
 
   // Build XML table
@@ -537,10 +758,10 @@ const generateClassAttendanceSheet = async (classId: string): Promise<string> =>
         </Cell>
       </Row>\n`;
 
-  if (subject) {
+  if (subjectDisplay) {
     tableXML += `      <Row>
         <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
-          <Data ss:Type="String">${subject}</Data>
+          <Data ss:Type="String">${subjectDisplay}</Data>
         </Cell>
       </Row>\n`;
   }
@@ -673,6 +894,8 @@ const generateClassAttendanceSheetFiltered = async (classId: string, filterDetai
 
   const className = classInfo?.name || 'Class';
   const subject = classInfo?.subject || '';
+  const subjectCode = classInfo?.subjectCode || '';
+  const subjectDisplay = [subject, subjectCode].filter(Boolean).join('  |  ');
   const session = getSessionFromDates(dates);
 
   // Build XML table
@@ -691,10 +914,10 @@ const generateClassAttendanceSheetFiltered = async (classId: string, filterDetai
         </Cell>
       </Row>\n`;
 
-  if (subject) {
+  if (subjectDisplay) {
     tableXML += `      <Row>
         <Cell ss:StyleID="Header" ss:MergeAcross="${2 + dates.length + 2}">
-          <Data ss:Type="String">${subject}</Data>
+          <Data ss:Type="String">${subjectDisplay}</Data>
         </Cell>
       </Row>\n`;
   }
@@ -757,6 +980,94 @@ const generateClassAttendanceSheetFiltered = async (classId: string, filterDetai
 
   tableXML += '    </Table>';
 
+  return tableXML;
+};
+
+/**
+ * Generate the "Holidays & Missed Dates" worksheet content for multi-sheet export.
+ */
+const generateHolidaysMissedSheet = async (classes: Class[]): Promise<string> => {
+  const holidays = await getHolidays();
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  let tableXML = '    <Table>\n';
+
+  // ── Section: Global Holidays ──
+  tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="1">
+          <Data ss:Type="String">Global Holidays</Data>
+        </Cell>
+      </Row>\n`;
+
+  tableXML += `      <Row>
+        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Date / Period</Data></Cell>
+        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Name</Data></Cell>
+      </Row>\n`;
+
+  if (holidays.length === 0) {
+    tableXML += `      <Row>
+        <Cell ss:StyleID="DataCell"><Data ss:Type="String">No holidays recorded</Data></Cell>
+        <Cell ss:StyleID="DataCell"><Data ss:Type="String"></Data></Cell>
+      </Row>\n`;
+  } else {
+    for (const h of holidays) {
+      const fmt = (ds: string) => {
+        const d = new Date(ds + 'T00:00:00');
+        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+      };
+      const dateDisplay = h.endDate ? `${fmt(h.date)}  →  ${fmt(h.endDate)}` : fmt(h.date);
+      tableXML += `      <Row>
+        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXML(dateDisplay)}</Data></Cell>
+        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXML(h.name)}</Data></Cell>
+      </Row>\n`;
+    }
+  }
+
+  tableXML += `      <Row></Row>\n`;
+
+  // ── Section: Missed Attendance Dates (per class) ──
+  tableXML += `      <Row>
+        <Cell ss:StyleID="Header" ss:MergeAcross="1">
+          <Data ss:Type="String">Missed Attendance Dates</Data>
+        </Cell>
+      </Row>\n`;
+
+  for (const cls of classes) {
+    if (!cls.schedulePeriods || cls.schedulePeriods.length === 0) continue;
+
+    const missed = await getMissedDates(cls.id);
+
+    tableXML += `      <Row>
+        <Cell ss:StyleID="ColumnHeader" ss:MergeAcross="1">
+          <Data ss:Type="String">${escapeXML(cls.name)}${cls.subject ? '  |  ' + escapeXML(cls.subject) : ''}</Data>
+        </Cell>
+      </Row>\n`;
+
+    tableXML += `      <Row>
+        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Date</Data></Cell>
+        <Cell ss:StyleID="ColumnHeader"><Data ss:Type="String">Day</Data></Cell>
+      </Row>\n`;
+
+    if (missed.length === 0) {
+      tableXML += `      <Row>
+        <Cell ss:StyleID="DataCell"><Data ss:Type="String">No missed dates</Data></Cell>
+        <Cell ss:StyleID="DataCell"><Data ss:Type="String"></Data></Cell>
+      </Row>\n`;
+    } else {
+      for (const dateStr of missed) {
+        const d = new Date(dateStr + 'T00:00:00');
+        const dateDisplay = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+        tableXML += `      <Row>
+        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXML(dateDisplay)}</Data></Cell>
+        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${DAY_NAMES[d.getDay()]}</Data></Cell>
+      </Row>\n`;
+      }
+    }
+
+    tableXML += `      <Row></Row>\n`;
+  }
+
+  tableXML += '    </Table>';
   return tableXML;
 };
 
@@ -864,6 +1175,14 @@ ${sheetData}
 `;
   }
 
+  // Add Holidays & Missed Dates sheet
+  const holidaysMissedData = await generateHolidaysMissedSheet(classes);
+  workbookContent += `
+  <Worksheet ss:Name="Holidays &amp; Missed">
+${holidaysMissedData}
+  </Worksheet>
+`;
+
   // Close workbook
   workbookContent += `</Workbook>`;
 
@@ -878,6 +1197,412 @@ ${sheetData}
   return { xls: workbookContent, filename };
 };
 
+// ============ DETAINEE LIST EXPORT (Attendance Performa) ============
+
+/**
+ * Derive B.Tech year from class name's first character.
+ * "1CE12" → 1, "3ce45" → 3. Returns 0 if not a digit 1-4.
+ */
+const getYearFromClassName = (className: string): number => {
+  const firstChar = className.charAt(0);
+  const year = parseInt(firstChar, 10);
+  return (year >= 1 && year <= 4) ? year : 0;
+};
+
+const getOrdinalSuffix = (n: number): string => {
+  if (n === 1) return '1st';
+  if (n === 2) return '2nd';
+  if (n === 3) return '3rd';
+  return `${n}th`;
+};
+
+/**
+ * Derive semester from year + session.
+ * Jan-May → even semester, otherwise → odd semester.
+ * Year 1 → sem 1 or 2, Year 2 → sem 3 or 4, etc.
+ */
+const getSemesterFromYearAndSession = (year: number, session: string): number => {
+  const isEven = /jan/i.test(session);
+  return (year - 1) * 2 + (isEven ? 2 : 1);
+};
+
+/**
+ * Format class/semester/group for the detainee export Row 6.
+ */
+const getDetaineeClassInfo = (className: string, session: string): {
+  classLabel: string;
+  semesterLabel: string;
+  groupLabel: string;
+} => {
+  const year = getYearFromClassName(className);
+  const classLabel = year > 0
+    ? `Class: B.Tech. (${getOrdinalSuffix(year)} Year)`
+    : `Class: ${className}`;
+
+  let semesterLabel = '';
+  if (year > 0) {
+    const sem = getSemesterFromYearAndSession(year, session);
+    semesterLabel = `Semester: ${getOrdinalSuffix(sem)}`;
+  }
+
+  const groupLabel = `Group: ${className.toUpperCase()}`;
+
+  return { classLabel, semesterLabel, groupLabel };
+};
+
+type DetaineeInfo = {
+  rollNumber: string;
+  name: string;
+  totalDelivered: number;
+  lectureRequired: number;
+  totalAttended: number;
+  lectureShort: number;
+  percentage: number;
+};
+
+/**
+ * Generate detainee list table XML for a single class (used as a sheet in multi-sheet export).
+ */
+const generateDetaineeSheetTable = async (classId: string): Promise<string> => {
+  const classInfo = await getClassById(classId);
+  const students = await getStudentsByClass(classId, true);
+  const attendanceRecords = await getAttendanceByClass(classId);
+
+  const sortedRecords = [...attendanceRecords].sort((a, b) => a.date.localeCompare(b.date));
+  const dates = sortedRecords.map(r => r.date);
+  const totalClasses = dates.length;
+  const session = getSessionFromDates(dates);
+
+  const className = classInfo?.name || 'Class';
+  const subject = classInfo?.subject || '';
+  const subjectCode = classInfo?.subjectCode || '';
+
+  if (totalClasses === 0) {
+    return `    <Table>
+      <Row><Cell><Data ss:Type="String">${escapeXML(className)}</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">No attendance records found.</Data></Cell></Row>
+    </Table>`;
+  }
+
+  const allDetainees: DetaineeInfo[] = [];
+
+  for (const student of students) {
+    const totalAbsent = sortedRecords.filter(record =>
+      record.absentStudentIds.includes(student.id)
+    ).length;
+    const totalPresent = totalClasses - totalAbsent;
+    const percentage = totalClasses > 0 ? (totalPresent / totalClasses) * 100 : 100;
+
+    if (percentage < 75) {
+      const lectureRequired = Math.ceil(totalClasses * 0.75);
+      allDetainees.push({
+        rollNumber: student.rollNumber,
+        name: student.name,
+        totalDelivered: totalClasses,
+        lectureRequired,
+        totalAttended: totalPresent,
+        lectureShort: lectureRequired - totalPresent,
+        percentage,
+      });
+    }
+  }
+
+  if (allDetainees.length === 0) {
+    return `    <Table>
+      <Row><Cell><Data ss:Type="String">${escapeXML(className)}</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">No detained students in this class.</Data></Cell></Row>
+    </Table>`;
+  }
+
+  const detained = allDetainees.filter(s => s.percentage < 63);
+  const condonedDAA = allDetainees.filter(s => s.percentage >= 63 && s.percentage < 69);
+  const condonedHoD = allDetainees.filter(s => s.percentage >= 69 && s.percentage < 75);
+
+  const buildSectionHeaders = (): string => {
+    return `      <Row ss:Height="21">
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Sr. No.</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Roll No.</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Name</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">No. of Lectures Delivered</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Lecture Required&#10;(75%)</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">No. of Lecture Attended</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">No. of Lecture Short</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Condoned 6% by HoD</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Condoned 6% by DAA</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Remarks</Data></Cell>
+      </Row>\n`;
+  };
+
+  const buildDataRows = (list: DetaineeInfo[]): string => {
+    return list.map((s, i) => `      <Row ss:Height="21">
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${i + 1}</Data></Cell>
+        <Cell ss:StyleID="DDataLeft"><Data ss:Type="String">${escapeXML(s.rollNumber)}</Data></Cell>
+        <Cell ss:StyleID="DDataLeft"><Data ss:Type="String">${escapeXML(s.name)}</Data></Cell>
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${s.totalDelivered}</Data></Cell>
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${s.lectureRequired}</Data></Cell>
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${s.totalAttended}</Data></Cell>
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${s.lectureShort}</Data></Cell>
+        <Cell ss:StyleID="DDataBorder"><Data ss:Type="String"></Data></Cell>
+        <Cell ss:StyleID="DDataBorder"><Data ss:Type="String"></Data></Cell>
+        <Cell ss:StyleID="DDataBorder"><Data ss:Type="String"></Data></Cell>
+      </Row>`).join('\n');
+  };
+
+  const buildHoDSectionHeaders = (): string => {
+    return `      <Row ss:Height="21">
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Sr. No.</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Roll No.</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Name</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">No. of Lectures Delivered</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Lecture Required&#10;(75%)</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">No. of Lecture Attended</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">No. of Lecture Short</Data></Cell>
+        <Cell ss:StyleID="DColHeaderMerged" ss:MergeAcross="1"><Data ss:Type="String">Condoned&#10;6% by HoD</Data></Cell>
+        <Cell ss:StyleID="DColHeader"><Data ss:Type="String">Remarks</Data></Cell>
+      </Row>\n`;
+  };
+
+  const buildHoDDataRows = (list: DetaineeInfo[]): string => {
+    return list.map((s, i) => `      <Row ss:Height="21">
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${i + 1}</Data></Cell>
+        <Cell ss:StyleID="DDataLeft"><Data ss:Type="String">${escapeXML(s.rollNumber)}</Data></Cell>
+        <Cell ss:StyleID="DDataLeft"><Data ss:Type="String">${escapeXML(s.name)}</Data></Cell>
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${s.totalDelivered}</Data></Cell>
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${s.lectureRequired}</Data></Cell>
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${s.totalAttended}</Data></Cell>
+        <Cell ss:StyleID="DDataCenter"><Data ss:Type="Number">${s.lectureShort}</Data></Cell>
+        <Cell ss:StyleID="DDataBorder" ss:MergeAcross="1"><Data ss:Type="String"></Data></Cell>
+        <Cell ss:StyleID="DDataBorder"><Data ss:Type="String"></Data></Cell>
+      </Row>`).join('\n');
+  };
+
+  let tableXML = `    <Table>
+      <Column ss:Width="48"/>
+      <Column ss:Width="75"/>
+      <Column ss:Width="220"/>
+      <Column ss:Width="80"/>
+      <Column ss:Width="61"/>
+      <Column ss:Width="68"/>
+      <Column ss:Width="58"/>
+      <Column ss:Width="68"/>
+      <Column ss:Width="66"/>
+      <Column ss:Width="62"/>\n`;
+
+  // Row 1: Institution header
+  tableXML += `      <Row ss:Height="36">
+        <Cell ss:StyleID="DInstHeader" ss:MergeAcross="9">
+          <Data ss:Type="String">Computer Science &amp; Engineering&#10;Punjabi University, Patiala</Data>
+        </Cell>
+      </Row>\n`;
+
+  // Row 2: Spacer
+  tableXML += `      <Row ss:Height="9.75"></Row>\n`;
+
+  // Row 3: Attendance Record title
+  tableXML += `      <Row ss:Height="21">
+        <Cell ss:StyleID="DTitleHeader" ss:MergeAcross="9">
+          <Data ss:Type="String">Attendance Record (${escapeXML(session.replace(' - ', '-').toUpperCase())})</Data>
+        </Cell>
+      </Row>\n`;
+
+  // Row 4: Empty merged row
+  tableXML += `      <Row ss:Height="15.75">
+        <Cell ss:MergeAcross="9"><Data ss:Type="String"></Data></Cell>
+      </Row>\n`;
+
+  // Row 5: Spacer
+  tableXML += `      <Row ss:Height="7.5"></Row>\n`;
+
+  // Row 6: Class / Semester / Group
+  const { classLabel, semesterLabel, groupLabel } = getDetaineeClassInfo(className, session);
+  tableXML += `      <Row ss:Height="15.75">
+        <Cell ss:StyleID="DInfoBold" ss:MergeAcross="2"><Data ss:Type="String">${escapeXML(classLabel)}</Data></Cell>
+        <Cell ss:StyleID="DInfoBold" ss:MergeAcross="1"><Data ss:Type="String">${escapeXML(semesterLabel)}</Data></Cell>
+        <Cell ss:StyleID="DInfoBoldRight" ss:MergeAcross="4"><Data ss:Type="String">${escapeXML(groupLabel)}</Data></Cell>
+      </Row>\n`;
+
+  // Row 7: Empty
+  tableXML += `      <Row ss:Height="15.75"></Row>\n`;
+
+  // Row 8: Subject and Subject Code
+  const subjectLine = [subject, subjectCode].filter(Boolean).join('  |  Code: ');
+  tableXML += `      <Row ss:Height="24">
+        <Cell ss:StyleID="DInfoBold" ss:MergeAcross="9"><Data ss:Type="String">Subject: ${escapeXML(subjectLine)}</Data></Cell>
+      </Row>\n`;
+
+  // Section 1: Less than 63% (Detained)
+  tableXML += `      <Row ss:Height="18">
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell ss:StyleID="DSectionLabel" ss:MergeAcross="8"><Data ss:Type="String">Less than 63% (Detained)</Data></Cell>
+      </Row>\n`;
+  tableXML += buildSectionHeaders();
+  if (detained.length > 0) {
+    tableXML += buildDataRows(detained) + '\n';
+  }
+
+  // Spacer
+  tableXML += `      <Row ss:Height="11.25"></Row>\n`;
+
+  // Section 2: Less than 69% but upto 63% (Condoned by DAA)
+  tableXML += `      <Row ss:Height="18">
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell ss:StyleID="DSectionLabel" ss:MergeAcross="8"><Data ss:Type="String">Less than 69% but upto 63% (To be condoned by Dean Academic Affairs)</Data></Cell>
+      </Row>\n`;
+  tableXML += buildSectionHeaders();
+  if (condonedDAA.length > 0) {
+    tableXML += buildDataRows(condonedDAA) + '\n';
+  }
+
+  // Spacer
+  tableXML += `      <Row ss:Height="11.25"></Row>\n`;
+
+  // Section 3: Less than 75% but upto 69% (Condoned by HoD)
+  tableXML += `      <Row ss:Height="18">
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell ss:StyleID="DSectionLabel" ss:MergeAcross="8"><Data ss:Type="String">Less than 75% but upto 69% (To be condoned by Head of Department)</Data></Cell>
+      </Row>\n`;
+  tableXML += buildHoDSectionHeaders();
+  if (condonedHoD.length > 0) {
+    tableXML += buildHoDDataRows(condonedHoD) + '\n';
+  }
+
+  // Spacer + Name
+  tableXML += `      <Row ss:Height="21"></Row>\n`;
+  tableXML += `      <Row ss:Height="24.75">
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell ss:StyleID="DSignatureRight" ss:MergeAcross="6"><Data ss:Type="String">Dr. Navdeep Singh</Data></Cell>
+      </Row>\n`;
+
+  tableXML += `    </Table>`;
+  return tableXML;
+};
+
+/**
+ * Export detainee lists for all classes as a multi-sheet Excel XML file.
+ * Each class gets its own sheet in Attendance Performa format with 3 sections:
+ *   1. < 63% — Detained
+ *   2. >= 63% and < 69% — To be condoned by Dean Academic Affairs
+ *   3. >= 69% and < 75% — To be condoned by Head of Department
+ */
+export const exportAllDetaineeLists = async (): Promise<{
+  xls: string;
+  filename: string;
+}> => {
+  const classes = await getClasses();
+
+  if (classes.length === 0) {
+    throw new Error('No classes to export');
+  }
+
+  // Detainee-specific styles (prefixed with D to avoid conflicts with attendance styles)
+  let workbookContent = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+
+  <Styles>
+    <Style ss:ID="DInstHeader">
+      <Font ss:FontName="Times New Roman" ss:Size="12" ss:Bold="1"/>
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+    </Style>
+    <Style ss:ID="DTitleHeader">
+      <Font ss:FontName="Times New Roman" ss:Size="14" ss:Bold="1"/>
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+    </Style>
+    <Style ss:ID="DInfoBold">
+      <Font ss:FontName="Times New Roman" ss:Size="12" ss:Bold="1"/>
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+    </Style>
+    <Style ss:ID="DInfoBoldRight">
+      <Font ss:FontName="Times New Roman" ss:Size="12" ss:Bold="1"/>
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+    </Style>
+    <Style ss:ID="DSectionLabel">
+      <Font ss:FontName="Times New Roman" ss:Size="10" ss:Bold="1"/>
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+    </Style>
+    <Style ss:ID="DColHeader">
+      <Font ss:FontName="Times New Roman" ss:Size="10" ss:Bold="1"/>
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="DColHeaderMerged">
+      <Font ss:FontName="Times New Roman" ss:Size="10" ss:Bold="1"/>
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:WrapText="1"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="DDataCenter">
+      <Font ss:FontName="Times New Roman" ss:Size="11"/>
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="DDataLeft">
+      <Font ss:FontName="Times New Roman" ss:Size="11"/>
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="DDataBorder">
+      <Font ss:FontName="Times New Roman" ss:Size="11"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="DSignatureRight">
+      <Font ss:FontName="Times New Roman" ss:Size="11" ss:Bold="1"/>
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+    </Style>
+  </Styles>
+`;
+
+  const usedSheetNames = new Set<string>();
+
+  for (const cls of classes) {
+    const sheetName = sanitizeSheetName(cls.name, usedSheetNames);
+    const sheetData = await generateDetaineeSheetTable(cls.id);
+
+    workbookContent += `
+  <Worksheet ss:Name="${escapeXML(sheetName)}">
+${sheetData}
+  </Worksheet>
+`;
+  }
+
+  workbookContent += `</Workbook>`;
+
+  const today = new Date();
+  const dateStr = `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}-${today.getFullYear()}`;
+  const filename = `All_Classes_Detainee_List_${dateStr}.xls`;
+
+  return { xls: workbookContent, filename };
+};
+
 // ============ DATA MANAGEMENT ============
 
 export const clearAllData = async (): Promise<void> => {
@@ -885,6 +1610,10 @@ export const clearAllData = async (): Promise<void> => {
     STORAGE_KEYS.CLASSES,
     STORAGE_KEYS.STUDENTS,
     STORAGE_KEYS.ATTENDANCE,
+    STORAGE_KEYS.REMARKS,
+    STORAGE_KEYS.HOLIDAYS,
+    STORAGE_KEYS.CANCELLATIONS,
+    STORAGE_KEYS.SORT_PREFERENCE,
   ]);
 };
 
@@ -892,11 +1621,17 @@ export const exportData = async (): Promise<string> => {
   const classes = await getClasses();
   const students = await getStudents();
   const attendance = await getAttendanceRecords();
+  const holidays = await getHolidays();
+  const cancellations = await getCancellations();
+  const remarks = await getRemarks();
 
   return JSON.stringify({
-    classes,
+    classes,        // includes schedulePeriods
     students,
     attendance,
+    holidays,       // includes exam period ranges
+    cancellations,
+    remarks,
     exportedAt: new Date().toISOString(),
   });
 };
@@ -912,6 +1647,15 @@ export const importData = async (jsonData: string): Promise<void> => {
     }
     if (data.attendance) {
       await AsyncStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(data.attendance));
+    }
+    if (data.holidays) {
+      await AsyncStorage.setItem(STORAGE_KEYS.HOLIDAYS, JSON.stringify(data.holidays));
+    }
+    if (data.cancellations) {
+      await AsyncStorage.setItem(STORAGE_KEYS.CANCELLATIONS, JSON.stringify(data.cancellations));
+    }
+    if (data.remarks) {
+      await AsyncStorage.setItem(STORAGE_KEYS.REMARKS, JSON.stringify(data.remarks));
     }
   } catch (error) {
     console.error('Error importing data:', error);

@@ -212,7 +212,7 @@ export const TakeAttendanceScreen: React.FC<Props> = ({ navigation, route }) => 
               <DateTimePicker
                 value={new Date(selectedDate + 'T12:00:00')}
                 mode="date"
-                display="default"
+                display="calendar"
                 onChange={(event, date) => {
                   if (date) {
                     const newDate = date.toISOString().split('T')[0];
