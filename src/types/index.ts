@@ -83,7 +83,7 @@ export type RootStackParamList = {
   AddStudent: { classId: string };
   EditStudent: { classId: string; studentId: string };
   BulkAddStudents: { classId: string };
-  TakeAttendance: { classId: string; date?: string };
+  TakeAttendance: { classId: string; date?: string; studentId?: string };
   AttendanceHistory: { classId: string };
   EditAttendance: { classId: string; date: string };
   ClassStats: { classId: string };

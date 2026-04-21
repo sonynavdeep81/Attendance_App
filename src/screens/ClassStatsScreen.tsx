@@ -22,7 +22,7 @@ type Props = {
   route: RouteProp<RootStackParamList, 'ClassStats'>;
 };
 
-export const ClassStatsScreen: React.FC<Props> = ({ route }) => {
+export const ClassStatsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { classId } = route.params;
   const [className, setClassName] = useState('');
   const [totalStudents, setTotalStudents] = useState(0);
@@ -128,7 +128,10 @@ export const ClassStatsScreen: React.FC<Props> = ({ route }) => {
     : studentStats;
 
   const renderStudentStat = ({ item }: { item: StudentAttendanceStats }) => (
-    <View style={[styles.statCard, item.isDetained && styles.statCardDetained]}>
+    <TouchableOpacity
+      style={[styles.statCard, item.isDetained && styles.statCardDetained]}
+      onPress={() => navigation.navigate('StudentAttendance', { classId, studentId: item.studentId })}
+    >
       <View style={styles.studentHeader}>
         <Text style={styles.rollNumber}>{item.rollNumber}</Text>
         <Text style={styles.studentName}>{item.studentName}</Text>
@@ -162,7 +165,7 @@ export const ClassStatsScreen: React.FC<Props> = ({ route }) => {
           <Text style={styles.statLabel}>Attendance</Text>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (

@@ -6,12 +6,14 @@ import {
   FlatList,
   RefreshControl,
   Switch,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Student, AttendanceRecord } from '../types';
-import { getStudentById, getAttendanceByClass, formatDate } from '../utils/storage';
+import { getStudentById, getAttendanceByClass, getAttendanceByDate, saveAttendance, formatDate } from '../utils/storage';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'StudentAttendance'>;
@@ -29,6 +31,9 @@ export const StudentAttendanceScreen: React.FC<Props> = ({ navigation, route }) 
   const [dayRecords, setDayRecords] = useState<DayRecord[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showAbsentOnly, setShowAbsentOnly] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const loadData = useCallback(async () => {
     const studentData = await getStudentById(studentId);
@@ -60,6 +65,43 @@ export const StudentAttendanceScreen: React.FC<Props> = ({ navigation, route }) 
     setRefreshing(false);
   };
 
+  const toggleSelectMode = () => {
+    setSelectMode((prev) => !prev);
+    setSelectedDates(new Set());
+  };
+
+  const toggleDateSelection = (date: string) => {
+    setSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedDates(new Set(filteredRecords.map((d) => d.date)));
+  };
+
+  const applyBulkStatus = async (markPresent: boolean) => {
+    if (selectedDates.size === 0) return;
+    setBulkSaving(true);
+    try {
+      for (const date of selectedDates) {
+        const record = await getAttendanceByDate(classId, date);
+        const absentIds = new Set<string>(record?.absentStudentIds ?? []);
+        if (markPresent) absentIds.delete(studentId);
+        else absentIds.add(studentId);
+        await saveAttendance(classId, date, Array.from(absentIds));
+      }
+      setSelectMode(false);
+      setSelectedDates(new Set());
+      await loadData();
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const filteredRecords = showAbsentOnly ? dayRecords.filter((d) => !d.present) : dayRecords;
 
   const totalLectures = dayRecords.length;
@@ -68,17 +110,37 @@ export const StudentAttendanceScreen: React.FC<Props> = ({ navigation, route }) 
   const percentage = totalLectures > 0 ? (totalPresent / totalLectures) * 100 : 100;
   const isDetained = totalLectures > 0 && percentage < 75;
 
-  const renderItem = ({ item, index }: { item: DayRecord; index: number }) => (
-    <View style={styles.row}>
-      <Text style={styles.srNo}>{index + 1}</Text>
-      <Text style={styles.dateText}>{formatDate(item.date)}</Text>
-      <View style={[styles.statusBadge, item.present ? styles.presentBadge : styles.absentBadge]}>
-        <Text style={[styles.statusText, item.present ? styles.presentText : styles.absentText]}>
-          {item.present ? 'Present' : 'Absent'}
-        </Text>
-      </View>
-    </View>
-  );
+  const renderItem = ({ item, index }: { item: DayRecord; index: number }) => {
+    const isSelected = selectedDates.has(item.date);
+    return (
+      <TouchableOpacity
+        style={[styles.row, isSelected && styles.rowSelected]}
+        onPress={() => {
+          if (selectMode) toggleDateSelection(item.date);
+          else navigation.navigate('TakeAttendance', { classId, date: item.date, studentId });
+        }}
+        onLongPress={() => {
+          if (!selectMode) {
+            setSelectMode(true);
+            setSelectedDates(new Set([item.date]));
+          }
+        }}
+      >
+        {selectMode && (
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Text style={styles.checkmark}>✓</Text>}
+          </View>
+        )}
+        <Text style={styles.srNo}>{index + 1}</Text>
+        <Text style={styles.dateText}>{formatDate(item.date)}</Text>
+        <View style={[styles.statusBadge, item.present ? styles.presentBadge : styles.absentBadge]}>
+          <Text style={[styles.statusText, item.present ? styles.presentText : styles.absentText]}>
+            {item.present ? 'Present' : 'Absent'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -119,7 +181,44 @@ export const StudentAttendanceScreen: React.FC<Props> = ({ navigation, route }) 
           trackColor={{ false: '#ccc', true: '#ffcdd2' }}
           thumbColor={showAbsentOnly ? '#c62828' : '#f4f3f4'}
         />
+        <TouchableOpacity style={[styles.selectBtn, selectMode && styles.selectBtnActive]} onPress={toggleSelectMode}>
+          <Text style={[styles.selectBtnText, selectMode && styles.selectBtnTextActive]}>
+            {selectMode ? 'Cancel' : 'Select'}
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Select mode action bar */}
+      {selectMode && (
+        <View style={styles.selectionBar}>
+          <TouchableOpacity onPress={selectAll}>
+            <Text style={styles.selectionBarLink}>Select All</Text>
+          </TouchableOpacity>
+          <Text style={styles.selectionCount}>
+            {selectedDates.size} selected
+          </Text>
+          {bulkSaving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <View style={styles.bulkActions}>
+              <TouchableOpacity
+                style={[styles.bulkBtn, styles.bulkPresent]}
+                onPress={() => applyBulkStatus(true)}
+                disabled={selectedDates.size === 0}
+              >
+                <Text style={styles.bulkBtnText}>Present</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.bulkBtn, styles.bulkAbsent]}
+                onPress={() => applyBulkStatus(false)}
+                disabled={selectedDates.size === 0}
+              >
+                <Text style={styles.bulkBtnText}>Absent</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Day-wise list */}
       <View style={styles.listHeader}>
@@ -293,5 +392,85 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 15,
     color: '#888',
+  },
+  selectBtn: {
+    marginLeft: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#4A90D9',
+  },
+  selectBtnActive: {
+    backgroundColor: '#4A90D9',
+  },
+  selectBtnText: {
+    fontSize: 13,
+    color: '#4A90D9',
+    fontWeight: '600',
+  },
+  selectBtnTextActive: {
+    color: '#fff',
+  },
+  selectionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#37474f',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  selectionBarLink: {
+    color: '#90caf9',
+    fontSize: 13,
+    fontWeight: '600',
+    marginRight: 12,
+  },
+  selectionCount: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bulkActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  bulkBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+  },
+  bulkPresent: {
+    backgroundColor: '#2e7d32',
+  },
+  bulkAbsent: {
+    backgroundColor: '#c62828',
+  },
+  bulkBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  rowSelected: {
+    backgroundColor: '#e3f2fd',
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#90a4ae',
+    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: '#4A90D9',
+    borderColor: '#4A90D9',
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

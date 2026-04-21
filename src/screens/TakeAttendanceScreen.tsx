@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,8 @@ type Props = {
 };
 
 export const TakeAttendanceScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { classId, date: initialDate } = route.params;
+  const { classId, date: initialDate, studentId: focusStudentId } = route.params;
+  const flatListRef = useRef<FlatList<Student>>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [absentIds, setAbsentIds] = useState<Set<string>>(new Set());
   const [className, setClassName] = useState('');
@@ -56,6 +57,15 @@ export const TakeAttendanceScreen: React.FC<Props> = ({ navigation, route }) => 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!focusStudentId || students.length === 0) return;
+    const index = students.findIndex((s) => s.id === focusStudentId);
+    if (index === -1) return;
+    setTimeout(() => {
+      flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.3 });
+    }, 300);
+  }, [focusStudentId, students]);
 
   const toggleAbsent = (studentId: string) => {
     setAbsentIds((prev) => {
@@ -288,10 +298,15 @@ export const TakeAttendanceScreen: React.FC<Props> = ({ navigation, route }) => 
 
       {/* Student List */}
       <FlatList
+        ref={flatListRef}
         data={students}
         renderItem={renderStudentItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        getItemLayout={(_data, index) => ({ length: 76, offset: 16 + index * 76, index })}
+        onScrollToIndexFailed={(info) => {
+          flatListRef.current?.scrollToOffset({ offset: 16 + info.index * 76, animated: true });
+        }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No students in this class</Text>
