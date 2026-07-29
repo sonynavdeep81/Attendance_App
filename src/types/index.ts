@@ -91,6 +91,7 @@ export type RootStackParamList = {
   StudentAttendance: { classId: string; studentId: string };
   ClassSchedule: { classId: string };
   Holidays: undefined;
+  Settings: undefined;
 };
 
 export type MainTabParamList = {

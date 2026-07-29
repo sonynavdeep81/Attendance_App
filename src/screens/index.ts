@@ -11,3 +11,4 @@ export { ClassRemarksScreen } from './ClassRemarksScreen';
 export { StudentAttendanceScreen } from './StudentAttendanceScreen';
 export { ClassScheduleScreen } from './ClassScheduleScreen';
 export { HolidaysScreen } from './HolidaysScreen';
+export { SettingsScreen } from './SettingsScreen';
