@@ -291,11 +291,6 @@ export const TakeAttendanceScreen: React.FC<Props> = ({ navigation, route }) => 
         </View>
       </View>
 
-      {/* Instructions */}
-      <Text style={styles.instructions}>
-        Tap on a student to toggle between Present/Absent. Students are Present by default.
-      </Text>
-
       {/* Student List */}
       <FlatList
         ref={flatListRef}
@@ -407,13 +402,6 @@ const styles = StyleSheet.create({
   },
   absentText: {
     color: '#f44336',
-  },
-  instructions: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    padding: 12,
-    backgroundColor: '#fff9e6',
   },
   listContent: {
     padding: 16,
