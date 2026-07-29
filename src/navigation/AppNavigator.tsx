@@ -2,6 +2,9 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+// Intentionally NOT AppText — the only Text usages in this file are fixed-size
+// (24px) emoji tab-bar icons in a fixed-height (60px) tab bar; app font-scale
+// should not affect them (risks clipping at larger presets).
 import { Text } from 'react-native';
 import { RootStackParamList, MainTabParamList } from '../types';
 import {

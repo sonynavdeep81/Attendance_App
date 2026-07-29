@@ -61,7 +61,7 @@ is the one guaranteed correct.
 - Same wrapping behavior as `AppText`, for RN's `TextInput`, so form
   fields scale consistently with display text.
 
-**Screen updates (mechanical, 14 files for `Text`, 6 for `TextInput`)**
+**Screen updates (mechanical, 13 files for `Text`, 6 for `TextInput`)**
 - In each screen currently doing
   `import { Text, View, ... } from 'react-native'`, remove `Text`
   (and/or `TextInput`) from that destructure and add
@@ -69,13 +69,18 @@ is the one guaranteed correct.
   `import { TextInput } from '../components/AppTextInput'`.
 - No changes to any `StyleSheet.create` blocks — the 173 existing
   `fontSize` values stay as-is.
-- Files: `ConfirmDialog.tsx`, `AppNavigator.tsx`, and all 12 screens in
-  `src/screens/` (see grep results — `AddEditClassScreen`,
-  `AddEditStudentScreen`, `AttendanceHistoryScreen`,
-  `BulkAddStudentsScreen`, `ClassDetailsScreen`, `ClassesScreen`,
-  `ClassRemarksScreen`, `ClassScheduleScreen`, `ClassStatsScreen`,
-  `HolidaysScreen`, `StatisticsScreen`, `StudentAttendanceScreen`,
+- Files: `ConfirmDialog.tsx` and all 12 screens in `src/screens/` (see
+  grep results — `AddEditClassScreen`, `AddEditStudentScreen`,
+  `AttendanceHistoryScreen`, `BulkAddStudentsScreen`,
+  `ClassDetailsScreen`, `ClassesScreen`, `ClassRemarksScreen`,
+  `ClassScheduleScreen`, `ClassStatsScreen`, `HolidaysScreen`,
+  `StatisticsScreen`, `StudentAttendanceScreen`,
   `TakeAttendanceScreen`).
+- **Exception: `AppNavigator.tsx`** is deliberately excluded from this
+  migration. Its only `Text` usages are fixed-size (24px) emoji
+  tab-bar icons inside a fixed-height (60px) tab bar; scaling them
+  serves no purpose and risks clipping at larger presets, so this file
+  keeps importing `Text` directly from `'react-native'`.
 
 **`src/screens/SettingsScreen.tsx`** (new)
 - Four preset buttons: Small / Medium / Large / Extra Large.
