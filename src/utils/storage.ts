@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   REMARKS: 'attendance_remarks',
   HOLIDAYS: 'attendance_holidays',
   CANCELLATIONS: 'attendance_cancellations',
+  FONT_SCALE: 'attendance_font_scale',
 };
 
 // Helper function to generate unique IDs
@@ -141,6 +142,20 @@ export const getSortPreference = async (): Promise<boolean> => {
 
 export const setSortPreference = async (sortByRoll: boolean): Promise<void> => {
   await AsyncStorage.setItem(STORAGE_KEYS.SORT_PREFERENCE, sortByRoll.toString());
+};
+
+export const getFontScale = async (): Promise<number> => {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.FONT_SCALE);
+    const parsed = data ? parseFloat(data) : NaN;
+    return isNaN(parsed) ? 1.0 : parsed;
+  } catch (error) {
+    return 1.0;
+  }
+};
+
+export const setFontScale = async (scale: number): Promise<void> => {
+  await AsyncStorage.setItem(STORAGE_KEYS.FONT_SCALE, scale.toString());
 };
 
 export const sortStudentsByRollNumber = (students: Student[]): Student[] => {
