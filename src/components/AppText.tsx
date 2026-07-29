@@ -10,6 +10,8 @@ export const Text: React.FC<TextProps> = ({ style, ...props }) => {
   return (
     <RNText
       {...props}
+      // Always forced off — text size is controlled by the app's own font-scale
+      // setting (Settings screen), not the phone's system font size.
       allowFontScaling={false}
       style={[style, { fontSize: baseFontSize * scale }]}
     />

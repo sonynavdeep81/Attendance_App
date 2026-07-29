@@ -10,6 +10,8 @@ export const TextInput: React.FC<TextInputProps> = ({ style, ...props }) => {
   return (
     <RNTextInput
       {...props}
+      // Always forced off — text size is controlled by the app's own font-scale
+      // setting (Settings screen), not the phone's system font size.
       allowFontScaling={false}
       style={[style, { fontSize: baseFontSize * scale }]}
     />
