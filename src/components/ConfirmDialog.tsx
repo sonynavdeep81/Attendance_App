@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   Modal,
   TouchableOpacity,
 } from 'react-native';
+import { Text } from './AppText';
 
 interface ConfirmDialogProps {
   visible: boolean;
