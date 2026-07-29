@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
@@ -11,6 +10,7 @@ import {
   InteractionManager,
   Modal,
 } from 'react-native';
+import { Text } from '../components/AppText';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as FileSystem from 'expo-file-system';
@@ -310,6 +310,12 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
     navigation.setOptions({
       headerRight: () => (
         <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Text style={styles.headerButtonText}>⚙️</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerButton}
             onPress={() => navigation.navigate('Holidays')}

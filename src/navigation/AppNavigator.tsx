@@ -2,7 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import { Text } from '../components/AppText';
 import { RootStackParamList, MainTabParamList } from '../types';
 import {
   ClassesScreen,
@@ -18,6 +18,7 @@ import {
   StudentAttendanceScreen,
   ClassScheduleScreen,
   HolidaysScreen,
+  SettingsScreen,
 } from '../screens';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -150,6 +151,11 @@ export const AppNavigator = () => {
           name="Holidays"
           component={HolidaysScreen}
           options={{ title: 'Global Holidays' }}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ title: 'Settings' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
