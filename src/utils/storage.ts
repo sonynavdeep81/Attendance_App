@@ -103,10 +103,34 @@ export const getClassById = async (id: string): Promise<Class | undefined> => {
 
 // ============ STUDENT OPERATIONS ============
 
+// One-time migration: backfill joinDate for students saved before this field existed.
+// Defaults to the class's earliest attendance record date, so existing stats don't shift.
+const backfillJoinDates = async (students: Student[]): Promise<Student[]> => {
+  const missing = students.filter((s) => !s.joinDate);
+  if (missing.length === 0) return students;
+
+  const allRecords = await getAttendanceRecords();
+  const earliestByClass = new Map<string, string>();
+  allRecords.forEach((r) => {
+    const current = earliestByClass.get(r.classId);
+    if (!current || r.date < current) earliestByClass.set(r.classId, r.date);
+  });
+
+  const updated = students.map((s) => {
+    if (s.joinDate) return s;
+    const joinDate = earliestByClass.get(s.classId) || s.createdAt.split('T')[0];
+    return { ...s, joinDate };
+  });
+
+  await AsyncStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+  return updated;
+};
+
 export const getStudents = async (): Promise<Student[]> => {
   try {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.STUDENTS);
-    return data ? JSON.parse(data) : [];
+    const students: Student[] = data ? JSON.parse(data) : [];
+    return await backfillJoinDates(students);
   } catch (error) {
     console.error('Error getting students:', error);
     return [];
@@ -164,13 +188,14 @@ export const sortStudentsByRollNumber = (students: Student[]): Student[] => {
   );
 };
 
-export const addStudent = async (classId: string, name: string, rollNumber: string, sortByRoll?: boolean): Promise<Student> => {
+export const addStudent = async (classId: string, name: string, rollNumber: string, sortByRoll?: boolean, joinDate?: string): Promise<Student> => {
   const students = await getStudents();
   const newStudent: Student = {
     id: generateId(),
     classId,
     name,
     rollNumber,
+    joinDate: joinDate || getTodayDate(),
     createdAt: new Date().toISOString(),
   };
   students.push(newStudent);
@@ -187,11 +212,11 @@ export const addStudent = async (classId: string, name: string, rollNumber: stri
   return newStudent;
 };
 
-export const updateStudent = async (id: string, name: string, rollNumber: string): Promise<void> => {
+export const updateStudent = async (id: string, name: string, rollNumber: string, joinDate: string): Promise<void> => {
   const students = await getStudents();
   const index = students.findIndex((s) => s.id === id);
   if (index !== -1) {
-    students[index] = { ...students[index], name, rollNumber };
+    students[index] = { ...students[index], name, rollNumber, joinDate };
     await AsyncStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
   }
 };
