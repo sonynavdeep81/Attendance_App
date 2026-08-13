@@ -11,10 +11,11 @@ import {
 } from 'react-native';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
-import { addStudent, getClassById, getSortPreference, setSortPreference } from '../utils/storage';
+import { addStudent, getClassById, getSortPreference, setSortPreference, getTodayDate, formatDate } from '../utils/storage';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'BulkAddStudents'>;
@@ -33,6 +34,8 @@ export const BulkAddStudentsScreen: React.FC<Props> = ({ navigation, route }) =>
   const [loading, setLoading] = useState(false);
   const [className, setClassName] = useState('');
   const [sortByRoll, setSortByRoll] = useState(false);
+  const [joinDate, setJoinDate] = useState(getTodayDate());
+  const [showJoinDatePicker, setShowJoinDatePicker] = useState(false);
 
   React.useEffect(() => {
     loadClassName();
@@ -115,7 +118,7 @@ export const BulkAddStudentsScreen: React.FC<Props> = ({ navigation, route }) =>
         const student = parsedStudents[i];
         // Only sort on last student add to avoid multiple sorts
         const shouldSort = sortByRoll && i === totalStudents - 1;
-        await addStudent(classId, student.name, student.rollNumber, shouldSort);
+        await addStudent(classId, student.name, student.rollNumber, shouldSort, joinDate);
         added++;
       }
       Alert.alert(
@@ -211,6 +214,22 @@ export const BulkAddStudentsScreen: React.FC<Props> = ({ navigation, route }) =>
                 thumbColor={sortByRoll ? '#4A90D9' : '#f4f3f4'}
               />
             </View>
+
+            <Text style={styles.label}>Join Date (applies to all {parsedStudents.length} students) *</Text>
+            <TouchableOpacity style={styles.dateButton} onPress={() => setShowJoinDatePicker(true)}>
+              <Text style={styles.dateButtonText}>{formatDate(joinDate)}</Text>
+            </TouchableOpacity>
+            {showJoinDatePicker && (
+              <DateTimePicker
+                value={new Date(joinDate + 'T00:00:00')}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(_, date) => {
+                  setShowJoinDatePicker(Platform.OS === 'ios');
+                  if (date) setJoinDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`);
+                }}
+              />
+            )}
 
             <TouchableOpacity
               style={[styles.saveButton, loading && styles.saveButtonDisabled]}
@@ -383,5 +402,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 2,
+  },
+  dateButton: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginBottom: 16,
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: '#333',
   },
 });
