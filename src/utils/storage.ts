@@ -588,6 +588,13 @@ const getSessionFromDates = (dates: string[]): string => {
   }
 };
 
+// Returns a " (Joined: DD/MM/YYYY)" suffix for export name cells when a student's
+// joinDate differs from the class's earliest attendance date; '' when they match.
+const getJoinDateNote = (student: Student, classEarliestDate: string): string => {
+  if (!classEarliestDate || student.joinDate === classEarliestDate) return '';
+  return ` (Joined: ${formatDate(student.joinDate)})`;
+};
+
 export const exportClassAttendanceToCSV = async (
   classId: string,
   filterDetainedOnly?: boolean
@@ -604,11 +611,13 @@ export const exportClassAttendanceToCSV = async (
   // Filter students if detained-only export is requested
   if (filterDetainedOnly) {
     students = students.filter(student => {
-      const totalAbsent = sortedRecords.filter(record =>
+      const studentRecords = sortedRecords.filter(record => record.date >= student.joinDate);
+      const studentTotalClasses = studentRecords.length;
+      const totalAbsent = studentRecords.filter(record =>
         record.absentStudentIds.includes(student.id)
       ).length;
-      const totalPresent = totalClasses - totalAbsent;
-      const percentage = totalClasses > 0 ? (totalPresent / totalClasses) * 100 : 100;
+      const totalPresent = studentTotalClasses - totalAbsent;
+      const percentage = studentTotalClasses > 0 ? (totalPresent / studentTotalClasses) * 100 : 100;
       return percentage < 75; // Only include detained students
     });
   }
@@ -645,29 +654,36 @@ export const exportClassAttendanceToCSV = async (
   headers.push('Total', 'Attendance %', 'Status');
   
   // Create data rows
+  const classEarliestDate = dates[0] || '';
   const rows: string[][] = [];
   students.forEach((student, index) => {
     const row: string[] = [
       (index + 1).toString(),
       student.rollNumber,
-      student.name,
+      `${student.name}${getJoinDateNote(student, classEarliestDate)}`,
     ];
-    
+
     let totalPresent = 0;
+    let studentTotalClasses = 0;
     dates.forEach(date => {
+      if (date < student.joinDate) {
+        row.push('-');
+        return;
+      }
+      studentTotalClasses++;
       const record = sortedRecords.find(r => r.date === date);
       const isAbsent = record?.absentStudentIds.includes(student.id) || false;
       row.push(isAbsent ? 'A' : 'P');
       if (!isAbsent) totalPresent++;
     });
-    
-    const percentage = totalClasses > 0 ? ((totalPresent / totalClasses) * 100) : 100;
+
+    const percentage = studentTotalClasses > 0 ? ((totalPresent / studentTotalClasses) * 100) : 100;
     const isDetained = percentage < 75;
-    
+
     row.push(totalPresent.toString());
     row.push(`${percentage.toFixed(2)}%`);
     row.push(isDetained ? 'DETAINED' : 'OK');
-    
+
     rows.push(row);
   });
   
@@ -702,6 +718,8 @@ export const exportClassAttendanceToCSV = async (
       } else if (i > 2 && i < row.length - 3) {
         if (cell === 'A') {
           style += ' color: #c5221f;';
+        } else if (cell === '-') {
+          style += ' color: #999999;';
         } else {
           style += ' color: #137333;';
         }
