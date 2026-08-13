@@ -1370,21 +1370,24 @@ const generateDetaineeSheetTable = async (classId: string): Promise<string> => {
     </Table>`;
   }
 
+  const classEarliestDate = dates[0] || '';
   const allDetainees: DetaineeInfo[] = [];
 
   for (const student of students) {
-    const totalAbsent = sortedRecords.filter(record =>
+    const studentRecords = sortedRecords.filter(record => record.date >= student.joinDate);
+    const studentTotalClasses = studentRecords.length;
+    const totalAbsent = studentRecords.filter(record =>
       record.absentStudentIds.includes(student.id)
     ).length;
-    const totalPresent = totalClasses - totalAbsent;
-    const percentage = totalClasses > 0 ? (totalPresent / totalClasses) * 100 : 100;
+    const totalPresent = studentTotalClasses - totalAbsent;
+    const percentage = studentTotalClasses > 0 ? (totalPresent / studentTotalClasses) * 100 : 100;
 
     if (percentage < 75) {
-      const lectureRequired = Math.ceil(totalClasses * 0.75);
+      const lectureRequired = Math.ceil(studentTotalClasses * 0.75);
       allDetainees.push({
         rollNumber: student.rollNumber,
-        name: student.name,
-        totalDelivered: totalClasses,
+        name: `${student.name}${getJoinDateNote(student, classEarliestDate)}`,
+        totalDelivered: studentTotalClasses,
         lectureRequired,
         totalAttended: totalPresent,
         lectureShort: lectureRequired - totalPresent,
