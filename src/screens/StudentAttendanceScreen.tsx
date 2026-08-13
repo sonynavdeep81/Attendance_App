@@ -46,7 +46,8 @@ export const StudentAttendanceScreen: React.FC<Props> = ({ navigation, route }) 
     const records: AttendanceRecord[] = await getAttendanceByClass(classId);
     // getAttendanceByClass returns descending; reverse for ascending display
     const ascending = [...records].reverse();
-    const days: DayRecord[] = ascending.map((r) => ({
+    const sinceJoin = studentData ? ascending.filter((r) => r.date >= studentData.joinDate) : ascending;
+    const days: DayRecord[] = sinceJoin.map((r) => ({
       date: r.date,
       present: !r.absentStudentIds.includes(studentId),
     }));
