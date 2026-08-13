@@ -55,6 +55,61 @@ git commit -m "types: add joinDate field to Student"
 
 ---
 
+### Task 1b: Backfill `joinDate` in `importAttendance.ts` (gap found during Task 1 implementation)
+
+**Files:**
+- Modify: `src/utils/importAttendance.ts:236-245`
+
+The Excel-import path builds `Student` object literals directly (not via `addStudent`), so it also needs a `joinDate`. This wasn't caught during brainstorming — the design spec only covered `addStudent`/`updateStudent` and the UI screens, not this bulk-import path. Default to the imported sheet's earliest date column (`dateColumns[0]`), consistent with the migration backfill's "earliest attendance date" rule in Task 2.
+
+- [ ] **Step 1: Add joinDate when constructing an imported student**
+
+Replace (`importAttendance.ts:236-245`):
+```ts
+      let student = newStudents.find(s => s.classId === classId && s.rollNumber === rollNumber);
+      if (!student) {
+        student = {
+          id: generateId(),
+          classId,
+          name,
+          rollNumber,
+          createdAt: new Date().toISOString(),
+        };
+        newStudents.push(student);
+        result.studentsImported++;
+      }
+```
+with:
+```ts
+      let student = newStudents.find(s => s.classId === classId && s.rollNumber === rollNumber);
+      if (!student) {
+        student = {
+          id: generateId(),
+          classId,
+          name,
+          rollNumber,
+          joinDate: dateColumns[0] || new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+        };
+        newStudents.push(student);
+        result.studentsImported++;
+      }
+```
+
+- [ ] **Step 2: Type-check**
+
+Run: `npx tsc --noEmit`
+Expected: The `importAttendance.ts` errors introduced by Task 1 are gone. Only the two pre-existing `AppNavigator.tsx` errors and the `storage.ts` `addStudent` call-site error (fixed in Task 2) should remain.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/utils/importAttendance.ts
+git commit -m "import: backfill joinDate for students created via Excel import"
+```
+
+---
+
 ### Task 2: `addStudent`/`updateStudent` + migration in `storage.ts`
 
 **Files:**
