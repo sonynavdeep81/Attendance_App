@@ -852,12 +852,19 @@ const generateClassAttendanceSheet = async (classId: string): Promise<string> =>
   tableXML += '      </Row>\n';
 
   // Data rows
+  const classEarliestDate = dates[0] || '';
   students.forEach((student, index) => {
     let totalPresent = 0;
+    let studentTotalClasses = 0;
 
     // Calculate attendance
     const attendanceCells: string[] = [];
     dates.forEach(date => {
+      if (date < student.joinDate) {
+        attendanceCells.push(`        <Cell ss:StyleID="NotJoined"><Data ss:Type="String">-</Data></Cell>`);
+        return;
+      }
+      studentTotalClasses++;
       const record = sortedRecords.find(r => r.date === date);
       const isAbsent = record?.absentStudentIds.includes(student.id) || false;
       const value = isAbsent ? 'A' : 'P';
@@ -866,14 +873,15 @@ const generateClassAttendanceSheet = async (classId: string): Promise<string> =>
       if (!isAbsent) totalPresent++;
     });
 
-    const percentage = totalClasses > 0 ? ((totalPresent / totalClasses) * 100) : 100;
+    const percentage = studentTotalClasses > 0 ? ((totalPresent / studentTotalClasses) * 100) : 100;
     const isDetained = percentage < 75;
     const statusStyleId = isDetained ? 'Detained' : 'OK';
+    const nameCell = `${escapeXML(student.name)}${escapeXML(getJoinDateNote(student, classEarliestDate))}`;
 
     tableXML += '      <Row>\n';
     tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="Number">${index + 1}</Data></Cell>\n`;
     tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXML(student.rollNumber)}</Data></Cell>\n`;
-    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXML(student.name)}</Data></Cell>\n`;
+    tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${nameCell}</Data></Cell>\n`;
     tableXML += attendanceCells.join('\n') + '\n';
     tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="Number">${totalPresent}</Data></Cell>\n`;
     tableXML += `        <Cell ss:StyleID="DataCell"><Data ss:Type="String">${percentage.toFixed(2)}%</Data></Cell>\n`;
@@ -1185,6 +1193,15 @@ export const exportAllClassesToXLS = async (filterDetainedOnly: boolean = false)
     </Style>
     <Style ss:ID="Absent">
       <Font ss:FontName="Times New Roman" ss:Color="#c5221f"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="NotJoined">
+      <Font ss:FontName="Times New Roman" ss:Color="#999999"/>
       <Borders>
         <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
         <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
