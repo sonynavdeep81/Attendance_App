@@ -510,10 +510,11 @@ export const getMissedDates = async (classId: string): Promise<string[]> => {
 export const calculateStudentStats = async (classId: string): Promise<StudentAttendanceStats[]> => {
   const students = await getStudentsByClass(classId);
   const attendanceRecords = await getAttendanceByClass(classId);
-  const totalClasses = attendanceRecords.length;
 
   return students.map((student) => {
-    const totalAbsent = attendanceRecords.filter((record) =>
+    const studentRecords = attendanceRecords.filter((record) => record.date >= student.joinDate);
+    const totalClasses = studentRecords.length;
+    const totalAbsent = studentRecords.filter((record) =>
       record.absentStudentIds.includes(student.id)
     ).length;
     const totalPresent = totalClasses - totalAbsent;
