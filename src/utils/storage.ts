@@ -221,6 +221,13 @@ export const updateStudent = async (id: string, name: string, rollNumber: string
   }
 };
 
+export const updateStudentsJoinDate = async (studentIds: string[], joinDate: string): Promise<void> => {
+  const students = await getStudents();
+  const idSet = new Set(studentIds);
+  const updated = students.map((s) => (idSet.has(s.id) ? { ...s, joinDate } : s));
+  await AsyncStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+};
+
 export const deleteStudent = async (id: string): Promise<void> => {
   const students = await getStudents();
   const filteredStudents = students.filter((s) => s.id !== id);

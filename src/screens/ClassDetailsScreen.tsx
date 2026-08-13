@@ -5,11 +5,14 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  Modal,
+  Platform,
 } from 'react-native';
 import { Text } from '../components/AppText';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { RootStackParamList, Student, Class } from '../types';
 import {
   getStudentsByClass,
@@ -17,6 +20,8 @@ import {
   getClassById,
   getTodayDate,
   getAttendanceByClass,
+  updateStudentsJoinDate,
+  formatDate,
 } from '../utils/storage';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
@@ -36,6 +41,10 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   const [showDeleteSelectedDialog, setShowDeleteSelectedDialog] = useState(false);
+  const [showSetJoinDateModal, setShowSetJoinDateModal] = useState(false);
+  const [batchJoinDate, setBatchJoinDate] = useState(getTodayDate());
+  const [showBatchJoinDatePicker, setShowBatchJoinDatePicker] = useState(false);
+  const [savingJoinDate, setSavingJoinDate] = useState(false);
 
   const loadData = useCallback(async () => {
     const cls = await getClassById(classId);
@@ -108,6 +117,19 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     setSelectionMode(false);
     setShowDeleteSelectedDialog(false);
     loadData();
+  };
+
+  const applyBatchJoinDate = async () => {
+    setSavingJoinDate(true);
+    try {
+      await updateStudentsJoinDate(Array.from(selectedStudents), batchJoinDate);
+      setSelectedStudents(new Set());
+      setSelectionMode(false);
+      setShowSetJoinDateModal(false);
+      loadData();
+    } finally {
+      setSavingJoinDate(false);
+    }
   };
 
   const renderStudentItem = ({ item }: { item: Student }) => (
@@ -246,6 +268,19 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
           {selectedStudents.size > 0 && (
             <TouchableOpacity
+              style={styles.setJoinDateButton}
+              onPress={() => {
+                setBatchJoinDate(getTodayDate());
+                setShowSetJoinDateModal(true);
+              }}
+            >
+              <Text style={styles.setJoinDateButtonText}>
+                📅 Set Join Date ({selectedStudents.size})
+              </Text>
+            </TouchableOpacity>
+          )}
+          {selectedStudents.size > 0 && (
+            <TouchableOpacity
               style={styles.deleteSelectedButton}
               onPress={() => setShowDeleteSelectedDialog(true)}
             >
@@ -312,6 +347,47 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
         onConfirm={deleteSelectedStudents}
         onCancel={() => setShowDeleteSelectedDialog(false)}
       />
+
+      <Modal visible={showSetJoinDateModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Set Join Date for {selectedStudents.size} Students</Text>
+
+            <Text style={styles.modalLabel}>Join Date</Text>
+            <TouchableOpacity style={styles.modalDateButton} onPress={() => setShowBatchJoinDatePicker(true)}>
+              <Text style={styles.modalDateButtonText}>{formatDate(batchJoinDate)}</Text>
+            </TouchableOpacity>
+            {showBatchJoinDatePicker && (
+              <DateTimePicker
+                value={new Date(batchJoinDate + 'T00:00:00')}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(_, date) => {
+                  setShowBatchJoinDatePicker(Platform.OS === 'ios');
+                  if (date) setBatchJoinDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`);
+                }}
+              />
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setShowSetJoinDateModal(false)}
+                disabled={savingJoinDate}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalApplyButton]}
+                onPress={applyBatchJoinDate}
+                disabled={savingJoinDate}
+              >
+                <Text style={styles.modalApplyButtonText}>{savingJoinDate ? 'Saving...' : 'Apply'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -441,6 +517,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  setJoinDateButton: {
+    backgroundColor: '#4A90D9',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  setJoinDateButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   deleteSelectedButton: {
     backgroundColor: '#d32f2f',
     paddingHorizontal: 16,
@@ -453,6 +542,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20,
+  },
+  modalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 20 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 16 },
+  modalLabel: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 8 },
+  modalDateButton: {
+    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16,
+  },
+  modalDateButtonText: { fontSize: 15, color: '#333' },
+  modalButtons: { flexDirection: 'row', gap: 10 },
+  modalButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  modalCancelButton: { backgroundColor: '#f0f0f0' },
+  modalCancelButtonText: { color: '#666', fontWeight: '600' },
+  modalApplyButton: { backgroundColor: '#4A90D9' },
+  modalApplyButtonText: { color: '#fff', fontWeight: '600' },
   deleteAllContainer: {
     paddingHorizontal: 16,
     paddingVertical: 8,
