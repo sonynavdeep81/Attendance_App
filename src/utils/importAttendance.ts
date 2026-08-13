@@ -242,6 +242,7 @@ export const importFromXLS = async (xmlContent: string): Promise<ImportResult> =
           classId,
           name,
           rollNumber,
+          joinDate: dateColumns[0] || new Date().toISOString().split('T')[0],
           createdAt: new Date().toISOString(),
         };
         newStudents.push(student);
