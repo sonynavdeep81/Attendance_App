@@ -43,6 +43,7 @@ export interface Student {
   classId: string;
   name: string;
   rollNumber: string;
+  joinDate: string;  // YYYY-MM-DD — attendance is only counted from this date onward
   createdAt: string;
 }
 
