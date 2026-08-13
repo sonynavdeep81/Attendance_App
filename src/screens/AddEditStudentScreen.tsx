@@ -10,10 +10,11 @@ import {
 } from 'react-native';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
-import { addStudent, updateStudent, getStudentById, getSortPreference, setSortPreference } from '../utils/storage';
+import { addStudent, updateStudent, getStudentById, getSortPreference, setSortPreference, getTodayDate, formatDate } from '../utils/storage';
 
 type AddStudentProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AddStudent'>;
@@ -34,6 +35,8 @@ export const AddEditStudentScreen: React.FC<Props> = (props) => {
 
   const [name, setName] = useState('');
   const [rollNumber, setRollNumber] = useState('');
+  const [joinDate, setJoinDate] = useState(getTodayDate());
+  const [showJoinDatePicker, setShowJoinDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sortByRoll, setSortByRoll] = useState(false);
 
@@ -60,6 +63,7 @@ export const AddEditStudentScreen: React.FC<Props> = (props) => {
     if (student) {
       setName(student.name);
       setRollNumber(student.rollNumber);
+      setJoinDate(student.joinDate);
     }
   };
 
@@ -76,10 +80,10 @@ export const AddEditStudentScreen: React.FC<Props> = (props) => {
     setLoading(true);
     try {
       if (isEdit && studentId) {
-        await updateStudent(studentId, name.trim(), rollNumber.trim());
+        await updateStudent(studentId, name.trim(), rollNumber.trim(), joinDate);
         Alert.alert('Success', 'Student updated successfully');
       } else {
-        await addStudent(classId, name.trim(), rollNumber.trim(), sortByRoll);
+        await addStudent(classId, name.trim(), rollNumber.trim(), sortByRoll, joinDate);
         Alert.alert('Success', 'Student added successfully');
       }
       props.navigation.goBack();
@@ -114,6 +118,22 @@ export const AddEditStudentScreen: React.FC<Props> = (props) => {
           placeholder="e.g., John Doe"
           placeholderTextColor="#999"
         />
+
+        <Text style={styles.label}>Join Date *</Text>
+        <TouchableOpacity style={styles.dateButton} onPress={() => setShowJoinDatePicker(true)}>
+          <Text style={styles.dateButtonText}>{formatDate(joinDate)}</Text>
+        </TouchableOpacity>
+        {showJoinDatePicker && (
+          <DateTimePicker
+            value={new Date(joinDate + 'T00:00:00')}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(_, date) => {
+              setShowJoinDatePicker(Platform.OS === 'ios');
+              if (date) setJoinDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`);
+            }}
+          />
+        )}
 
         {!isEdit && (
           <View style={styles.sortOption}>
@@ -174,6 +194,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#ddd',
+  },
+  dateButton: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: '#333',
   },
   saveButton: {
     backgroundColor: '#4A90D9',
