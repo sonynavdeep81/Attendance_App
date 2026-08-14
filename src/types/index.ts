@@ -5,11 +5,14 @@ export interface SchedulePeriod {
   startDate: string; // YYYY-MM-DD — effective from this date onwards
 }
 
+export type ClassType = 'theory' | 'lab';
+
 export interface Class {
   id: string;
   name: string;
   subject?: string;
   subjectCode?: string;
+  classType?: ClassType; // defaults to 'theory' when absent (legacy classes)
   createdAt: string;
   schedulePeriods?: SchedulePeriod[];
 }

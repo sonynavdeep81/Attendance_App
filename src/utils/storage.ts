@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Class, Student, AttendanceRecord, StudentAttendanceStats, ClassAttendanceStats, ClassRemark, Holiday, ClassCancellation } from '../types';
+import { Class, ClassType, Student, AttendanceRecord, StudentAttendanceStats, ClassAttendanceStats, ClassRemark, Holiday, ClassCancellation } from '../types';
 
 const STORAGE_KEYS = {
   CLASSES: 'attendance_classes',
@@ -46,13 +46,14 @@ export const getClasses = async (): Promise<Class[]> => {
   }
 };
 
-export const addClass = async (name: string, subject?: string, subjectCode?: string): Promise<Class> => {
+export const addClass = async (name: string, subject?: string, subjectCode?: string, classType: ClassType = 'theory'): Promise<Class> => {
   const classes = await getClasses();
   const newClass: Class = {
     id: generateId(),
     name,
     subject,
     subjectCode,
+    classType,
     createdAt: new Date().toISOString(),
   };
   classes.push(newClass);
@@ -60,11 +61,11 @@ export const addClass = async (name: string, subject?: string, subjectCode?: str
   return newClass;
 };
 
-export const updateClass = async (id: string, name: string, subject?: string, subjectCode?: string): Promise<void> => {
+export const updateClass = async (id: string, name: string, subject?: string, subjectCode?: string, classType: ClassType = 'theory'): Promise<void> => {
   const classes = await getClasses();
   const index = classes.findIndex((c) => c.id === id);
   if (index !== -1) {
-    classes[index] = { ...classes[index], name, subject, subjectCode };
+    classes[index] = { ...classes[index], name, subject, subjectCode, classType };
     await AsyncStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(classes));
   }
 };
@@ -99,6 +100,47 @@ export const deleteClass = async (id: string): Promise<void> => {
 export const getClassById = async (id: string): Promise<Class | undefined> => {
   const classes = await getClasses();
   return classes.find((c) => c.id === id);
+};
+
+// Compresses a list of roll numbers into ranges, e.g. ["12501068".."12501074"] -> "12501068-74".
+// Consecutive numeric roll numbers sharing the same prefix (all but the last 2 digits) are
+// shortened to "start-DD"; otherwise the full end number is shown. Non-consecutive or
+// non-numeric roll numbers are listed individually.
+export const formatRollNumberRanges = (rollNumbers: string[]): string => {
+  const numeric: { raw: string; num: number }[] = [];
+  const nonNumeric: string[] = [];
+
+  for (const r of rollNumbers) {
+    const trimmed = r.trim();
+    if (!trimmed) continue;
+    if (/^\d+$/.test(trimmed)) {
+      numeric.push({ raw: trimmed, num: parseInt(trimmed, 10) });
+    } else {
+      nonNumeric.push(trimmed);
+    }
+  }
+  numeric.sort((a, b) => a.num - b.num || a.raw.localeCompare(b.raw));
+  nonNumeric.sort();
+
+  const groups: string[] = [];
+  let i = 0;
+  while (i < numeric.length) {
+    let j = i;
+    while (j + 1 < numeric.length && numeric[j + 1].num === numeric[j].num + 1) j++;
+    const start = numeric[i];
+    const end = numeric[j];
+    if (i === j) {
+      groups.push(start.raw);
+    } else {
+      const prefixLen = start.raw.length - 2;
+      const sameLength = start.raw.length === end.raw.length;
+      const samePrefix = sameLength && prefixLen > 0 && start.raw.slice(0, prefixLen) === end.raw.slice(0, prefixLen);
+      groups.push(samePrefix ? `${start.raw}-${end.raw.slice(prefixLen)}` : `${start.raw}-${end.raw}`);
+    }
+    i = j + 1;
+  }
+
+  return [...groups, ...nonNumeric].join(', ');
 };
 
 // ============ STUDENT OPERATIONS ============

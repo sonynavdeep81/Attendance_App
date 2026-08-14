@@ -11,7 +11,7 @@ import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList } from '../types';
+import { RootStackParamList, ClassType } from '../types';
 import { addClass, updateClass, getClassById } from '../utils/storage';
 
 type AddClassProps = {
@@ -32,6 +32,7 @@ export const AddEditClassScreen: React.FC<Props> = (props) => {
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
   const [subjectCode, setSubjectCode] = useState('');
+  const [classType, setClassType] = useState<ClassType>('theory');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export const AddEditClassScreen: React.FC<Props> = (props) => {
       setName(classData.name);
       setSubject(classData.subject || '');
       setSubjectCode(classData.subjectCode || '');
+      setClassType(classData.classType || 'theory');
     }
   };
 
@@ -59,10 +61,10 @@ export const AddEditClassScreen: React.FC<Props> = (props) => {
     setLoading(true);
     try {
       if (isEdit && classId) {
-        await updateClass(classId, name.trim(), subject.trim() || undefined, subjectCode.trim() || undefined);
+        await updateClass(classId, name.trim(), subject.trim() || undefined, subjectCode.trim() || undefined, classType);
         Alert.alert('Success', 'Class updated successfully');
       } else {
-        await addClass(name.trim(), subject.trim() || undefined, subjectCode.trim() || undefined);
+        await addClass(name.trim(), subject.trim() || undefined, subjectCode.trim() || undefined, classType);
         Alert.alert('Success', 'Class added successfully');
       }
       props.navigation.goBack();
@@ -106,6 +108,26 @@ export const AddEditClassScreen: React.FC<Props> = (props) => {
           placeholderTextColor="#999"
         />
 
+        <Text style={styles.label}>Class Type</Text>
+        <View style={styles.typeToggle}>
+          <TouchableOpacity
+            style={[styles.typeOption, classType === 'theory' && styles.typeOptionActive]}
+            onPress={() => setClassType('theory')}
+          >
+            <Text style={[styles.typeOptionText, classType === 'theory' && styles.typeOptionTextActive]}>
+              Theory
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.typeOption, classType === 'lab' && styles.typeOptionActive]}
+            onPress={() => setClassType('lab')}
+          >
+            <Text style={[styles.typeOptionText, classType === 'lab' && styles.typeOptionTextActive]}>
+              Lab
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity
           style={[styles.saveButton, loading && styles.saveButtonDisabled]}
           onPress={handleSave}
@@ -142,6 +164,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#ddd',
+  },
+  typeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    overflow: 'hidden',
+  },
+  typeOption: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  typeOptionActive: {
+    backgroundColor: '#4A90D9',
+  },
+  typeOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  typeOptionTextActive: {
+    color: '#fff',
   },
   saveButton: {
     backgroundColor: '#4A90D9',
