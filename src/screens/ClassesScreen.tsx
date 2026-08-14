@@ -16,13 +16,77 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
+import JSZip from 'jszip';
 import { Class, RootStackParamList } from '../types';
 import { getClasses, deleteClass, getStudentsByClass, getAttendanceByClass, exportAllClassesToXLS, exportAllDetaineeLists, exportData, importData, clearAllData } from '../utils/storage';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
+const todayDateStr = () => {
+  const today = new Date();
+  return `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getFullYear()}`;
+};
+
+// Writes (mobile) or downloads (web) a single file and shares it.
+const shareOrDownloadFile = async (content: string, filename: string, mimeType: string, dialogTitle: string) => {
+  if (Platform.OS === 'web') {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    Alert.alert('Export Successful', `File "${filename}" downloaded!`);
+  } else {
+    const fileUri = FileSystem.documentDirectory + filename;
+    await FileSystem.writeAsStringAsync(fileUri, content, { encoding: FileSystem.EncodingType.UTF8 });
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(fileUri, { mimeType, dialogTitle });
+    } else {
+      Alert.alert('Success', `File saved to: ${fileUri}`);
+    }
+  }
+};
+
+// Bundles multiple files into one .zip and shares/downloads it in a single step.
+const shareOrDownloadZip = async (files: { filename: string; content: string }[], zipFilename: string) => {
+  const zip = new JSZip();
+  files.forEach((f) => zip.file(f.filename, f.content));
+
+  if (Platform.OS === 'web') {
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = zipFilename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    Alert.alert('Export Successful', `File "${zipFilename}" downloaded!`);
+  } else {
+    const base64Zip = await zip.generateAsync({ type: 'base64' });
+    const fileUri = FileSystem.documentDirectory + zipFilename;
+    await FileSystem.writeAsStringAsync(fileUri, base64Zip, { encoding: FileSystem.EncodingType.Base64 });
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(fileUri, { mimeType: 'application/zip', dialogTitle: 'Save Export Files' });
+    } else {
+      Alert.alert('Success', `File saved to: ${fileUri}`);
+    }
+  }
+};
+
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 };
+
+type ExportType = 'all' | 'detainedOnly' | 'detaineeList' | 'backup';
 
 export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
   const [classes, setClasses] = useState<Class[]>([]);
@@ -33,6 +97,7 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
   const [importing, setImporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedExportTypes, setSelectedExportTypes] = useState<Set<ExportType>>(new Set());
 
   const loadClasses = useCallback(async () => {
     const data = await getClasses();
@@ -51,139 +116,27 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
     setClassInfo(Object.fromEntries(infoEntries));
   }, []);
 
-  const performExport = useCallback(async (filterDetainedOnly: boolean) => {
-    setExporting(true);
-    try {
-      const { xls: xlsContent, filename } = await exportAllClassesToXLS(filterDetainedOnly);
-
-      if (Platform.OS === 'web') {
-        // Web: Create download
-        const blob = new Blob([xlsContent], { type: 'application/vnd.ms-excel' });
-        const url = URL.createObjectURL(blob);
-
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-        Alert.alert('Export Successful', `File "${filename}" downloaded!`);
-      } else {
-        // Mobile: Save and share
-        const fileUri = FileSystem.documentDirectory + filename;
-        await FileSystem.writeAsStringAsync(fileUri, xlsContent, {
-          encoding: FileSystem.EncodingType.UTF8,
-        });
-
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
-          await Sharing.shareAsync(fileUri, {
-            mimeType: 'application/vnd.ms-excel',
-            dialogTitle: 'Save Attendance File',
-            UTI: 'com.microsoft.excel.xls',
-          });
-        } else {
-          Alert.alert('Success', `File saved to: ${fileUri}`);
-        }
+  // Generates the content for one export type, without writing/sharing it yet.
+  const buildExportContent = async (type: ExportType): Promise<{ filename: string; content: string; mimeType: string }> => {
+    switch (type) {
+      case 'all': {
+        const { xls, filename } = await exportAllClassesToXLS(false);
+        return { filename, content: xls, mimeType: 'application/vnd.ms-excel' };
       }
-    } catch (error) {
-      console.error('Export all error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to export attendance data.';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setExporting(false);
-    }
-  }, []);
-
-  const performDetaineeExport = useCallback(async () => {
-    setExporting(true);
-    try {
-      const { xls: xlsContent, filename } = await exportAllDetaineeLists();
-
-      if (Platform.OS === 'web') {
-        const blob = new Blob([xlsContent], { type: 'application/vnd.ms-excel' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-        Alert.alert('Export Successful', `File "${filename}" downloaded!`);
-      } else {
-        const fileUri = FileSystem.documentDirectory + filename;
-        await FileSystem.writeAsStringAsync(fileUri, xlsContent, {
-          encoding: FileSystem.EncodingType.UTF8,
-        });
-
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
-          await Sharing.shareAsync(fileUri, {
-            mimeType: 'application/vnd.ms-excel',
-            dialogTitle: 'Save Detainee List',
-            UTI: 'com.microsoft.excel.xls',
-          });
-        } else {
-          Alert.alert('Success', `File saved to: ${fileUri}`);
-        }
+      case 'detainedOnly': {
+        const { xls, filename } = await exportAllClassesToXLS(true);
+        return { filename, content: xls, mimeType: 'application/vnd.ms-excel' };
       }
-    } catch (error) {
-      console.error('Detainee list export error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to export detainee list.';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setExporting(false);
-    }
-  }, []);
-
-  const performBackup = useCallback(async () => {
-    setExporting(true);
-    try {
-      const jsonData = await exportData();
-      const today = new Date();
-      const dateStr = `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getFullYear()}`;
-      const filename = `Attendance_Backup_${dateStr}.json`;
-
-      if (Platform.OS === 'web') {
-        const blob = new Blob([jsonData], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        Alert.alert('Backup Successful', `File "${filename}" downloaded!`);
-      } else {
-        const fileUri = FileSystem.documentDirectory + filename;
-        await FileSystem.writeAsStringAsync(fileUri, jsonData, {
-          encoding: FileSystem.EncodingType.UTF8,
-        });
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
-          await Sharing.shareAsync(fileUri, {
-            mimeType: 'application/json',
-            dialogTitle: 'Save Backup File',
-          });
-        } else {
-          Alert.alert('Success', `Backup saved to: ${fileUri}`);
-        }
+      case 'detaineeList': {
+        const { xls, filename } = await exportAllDetaineeLists();
+        return { filename, content: xls, mimeType: 'application/vnd.ms-excel' };
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create backup.';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setExporting(false);
+      case 'backup': {
+        const jsonData = await exportData();
+        return { filename: `Backup_${todayDateStr()}.json`, content: jsonData, mimeType: 'application/json' };
+      }
     }
-  }, []);
+  };
 
   const performRestoreFromBackup = useCallback(async () => {
     try {
@@ -290,8 +243,45 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert('No Classes', 'There are no classes to export.');
       return;
     }
+    setSelectedExportTypes(new Set<ExportType>(['all', 'detainedOnly', 'detaineeList', 'backup']));
     setShowExportModal(true);
   }, [classes]);
+
+  const toggleExportType = (type: ExportType) => {
+    setSelectedExportTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
+
+  const runSelectedExports = useCallback(async () => {
+    if (selectedExportTypes.size === 0) {
+      Alert.alert('Nothing Selected', 'Select at least one export option.');
+      return;
+    }
+    setShowExportModal(false);
+    setExporting(true);
+    try {
+      const order: ExportType[] = ['all', 'detainedOnly', 'detaineeList', 'backup'];
+      const chosen = order.filter((t) => selectedExportTypes.has(t));
+      const files = await Promise.all(chosen.map(buildExportContent));
+
+      if (files.length === 1) {
+        const { filename, content, mimeType } = files[0];
+        await shareOrDownloadFile(content, filename, mimeType, 'Save Export File');
+      } else {
+        await shareOrDownloadZip(files, `Attendance_Export_${todayDateStr()}.zip`);
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export data.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setExporting(false);
+    }
+  }, [selectedExportTypes]);
 
   const handleImport = useCallback(() => {
     setShowImportModal(true);
@@ -432,17 +422,28 @@ export const ClassesScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowExportModal(false)}>
           <View style={styles.menuSheet}>
             <Text style={styles.menuTitle}>Export / Backup</Text>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowExportModal(false); performExport(false); }}>
-              <Text style={styles.menuItemText}>All Students (XLS)</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => toggleExportType('all')}>
+              <Text style={styles.checkboxRowText}>
+                {selectedExportTypes.has('all') ? '☑️' : '⬜'}  All Students (XLS)
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowExportModal(false); performExport(true); }}>
-              <Text style={styles.menuItemText}>Detained Only (XLS)</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => toggleExportType('detainedOnly')}>
+              <Text style={styles.checkboxRowText}>
+                {selectedExportTypes.has('detainedOnly') ? '☑️' : '⬜'}  Detained Only (XLS)
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowExportModal(false); performDetaineeExport(); }}>
-              <Text style={styles.menuItemText}>Detainee List (XLS)</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => toggleExportType('detaineeList')}>
+              <Text style={styles.checkboxRowText}>
+                {selectedExportTypes.has('detaineeList') ? '☑️' : '⬜'}  Detainee List (XLS)
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowExportModal(false); performBackup(); }}>
-              <Text style={styles.menuItemText}>Full Backup (JSON)</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => toggleExportType('backup')}>
+              <Text style={styles.checkboxRowText}>
+                {selectedExportTypes.has('backup') ? '☑️' : '⬜'}  Full Backup (JSON)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={runSelectedExports}>
+              <Text style={[styles.menuItemText, styles.menuItemPrimary]}>Export Selected</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.menuItem, styles.menuCancel]} onPress={() => setShowExportModal(false)}>
               <Text style={styles.menuCancelText}>Cancel</Text>
@@ -640,6 +641,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#888',
     textAlign: 'center',
+  },
+  menuItemPrimary: {
+    color: '#1976d2',
+    fontWeight: '700',
+  },
+  checkboxRowText: {
+    fontSize: 16,
+    color: '#333',
   },
   headerButtons: {
     flexDirection: 'row' as const,

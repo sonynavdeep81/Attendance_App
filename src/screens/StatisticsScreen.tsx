@@ -75,7 +75,7 @@ export const StatisticsScreen: React.FC<Props> = ({ navigation }) => {
               styles.statValue,
               avgAttendance < 75 && styles.statValueWarning
             ]}>
-              {avgAttendance.toFixed(1)}%
+              {item.totalClassesConducted > 0 ? `${avgAttendance.toFixed(1)}%` : '—'}
             </Text>
             <Text style={styles.statLabel}>Avg Attendance</Text>
           </View>

@@ -1284,8 +1284,7 @@ ${holidaysMissedData}
   const dateStr = `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth() + 1)
     .toString()
     .padStart(2, '0')}-${today.getFullYear()}`;
-  const filenameSuffix = filterDetainedOnly ? '_Detained' : '';
-  const filename = `All_Classes_Attendance${filenameSuffix}_${dateStr}.xls`;
+  const filename = filterDetainedOnly ? `Detained_${dateStr}.xls` : `Attendance_${dateStr}.xls`;
 
   return { xls: workbookContent, filename };
 };
@@ -1694,7 +1693,7 @@ ${sheetData}
   const dateStr = `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth() + 1)
     .toString()
     .padStart(2, '0')}-${today.getFullYear()}`;
-  const filename = `All_Classes_Detainee_List_${dateStr}.xls`;
+  const filename = `Detainee_List_${dateStr}.xls`;
 
   return { xls: workbookContent, filename };
 };

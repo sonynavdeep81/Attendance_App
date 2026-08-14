@@ -47,13 +47,14 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [savingJoinDate, setSavingJoinDate] = useState(false);
 
   const loadData = useCallback(async () => {
-    const cls = await getClassById(classId);
+    const [cls, studentList, attendance] = await Promise.all([
+      getClassById(classId),
+      getStudentsByClass(classId),
+      getAttendanceByClass(classId),
+    ]);
+
     setClassInfo(cls || null);
-
-    const studentList = await getStudentsByClass(classId);
     setStudents(studentList);
-
-    const attendance = await getAttendanceByClass(classId);
     setTotalClasses(attendance.length);
   }, [classId]);
 
@@ -174,70 +175,69 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       {/* Header with class info */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{classInfo?.name || 'Class'}</Text>
-        {classInfo?.subject && <Text style={styles.headerSubject}>{classInfo.subject}</Text>}
-        <View style={styles.headerStats}>
-          <View style={styles.headerStat}>
-            <Text style={styles.headerStatNumber}>{students.length}</Text>
-            <Text style={styles.headerStatLabel}>Students</Text>
-          </View>
-          <View style={styles.headerStat}>
-            <Text style={styles.headerStatNumber}>{totalClasses}</Text>
-            <Text style={styles.headerStatLabel}>Classes</Text>
-          </View>
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {classInfo?.name || 'Class'}
+            {classInfo?.subject ? <Text style={styles.headerSubject}> · {classInfo.subject}</Text> : null}
+          </Text>
+          <Text style={styles.headerStatsInline} numberOfLines={1}>
+            {students.length} students · {totalClasses} classes
+          </Text>
         </View>
       </View>
 
-      {/* Action buttons - 2x2 Grid */}
-      <View style={styles.actions}>
-        {/* Row 1 */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.primaryAction]}
-            onPress={() => navigation.navigate('TakeAttendance', { classId, date: getTodayDate() })}
-          >
-            <Text style={styles.actionButtonText} numberOfLines={1}>📋 Attendance</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryAction]}
-            onPress={() => navigation.navigate('AttendanceHistory', { classId })}
-          >
-            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📅 History</Text>
-          </TouchableOpacity>
-        </View>
+      {/* Action buttons - 2x2 Grid (hidden while selecting students, to give the list more room) */}
+      {!selectionMode && (
+        <View style={styles.actions}>
+          {/* Row 1 */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.primaryAction]}
+              onPress={() => navigation.navigate('TakeAttendance', { classId, date: getTodayDate() })}
+            >
+              <Text style={styles.actionButtonText} numberOfLines={1}>📋 Attendance</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryAction]}
+              onPress={() => navigation.navigate('AttendanceHistory', { classId })}
+            >
+              <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📅 History</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Row 2 */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryAction]}
-            onPress={() => navigation.navigate('ClassStats', { classId })}
-          >
-            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📊 Stats</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryAction]}
-            onPress={() => navigation.navigate('BulkAddStudents', { classId })}
-          >
-            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📋 Bulk Add</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Row 2 */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryAction]}
+              onPress={() => navigation.navigate('ClassStats', { classId })}
+            >
+              <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📊 Stats</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryAction]}
+              onPress={() => navigation.navigate('BulkAddStudents', { classId })}
+            >
+              <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📋 Bulk Add</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Row 3 */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryAction]}
-            onPress={() => navigation.navigate('ClassRemarks', { classId })}
-          >
-            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📝 Remarks</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryAction]}
-            onPress={() => navigation.navigate('ClassSchedule', { classId })}
-          >
-            <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📅 Schedule</Text>
-          </TouchableOpacity>
+          {/* Row 3 */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryAction]}
+              onPress={() => navigation.navigate('ClassRemarks', { classId })}
+            >
+              <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📝 Remarks</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryAction]}
+              onPress={() => navigation.navigate('ClassSchedule', { classId })}
+            >
+              <Text style={[styles.actionButtonText, styles.secondaryActionText]} numberOfLines={1}>📅 Schedule</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Student list */}
       <View style={styles.sectionHeader}>
@@ -267,27 +267,27 @@ export const ClassDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
             </TouchableOpacity>
           </View>
           {selectedStudents.size > 0 && (
-            <TouchableOpacity
-              style={styles.setJoinDateButton}
-              onPress={() => {
-                setBatchJoinDate(getTodayDate());
-                setShowSetJoinDateModal(true);
-              }}
-            >
-              <Text style={styles.setJoinDateButtonText}>
-                📅 Set Join Date ({selectedStudents.size})
-              </Text>
-            </TouchableOpacity>
-          )}
-          {selectedStudents.size > 0 && (
-            <TouchableOpacity
-              style={styles.deleteSelectedButton}
-              onPress={() => setShowDeleteSelectedDialog(true)}
-            >
-              <Text style={styles.deleteSelectedButtonText}>
-                🗑️ Delete Selected ({selectedStudents.size})
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.selectionActionRow}>
+              <TouchableOpacity
+                style={[styles.setJoinDateButton, styles.selectionActionButton]}
+                onPress={() => {
+                  setBatchJoinDate(getTodayDate());
+                  setShowSetJoinDateModal(true);
+                }}
+              >
+                <Text style={styles.setJoinDateButtonText} numberOfLines={1}>
+                  📅 Set Join Date ({selectedStudents.size})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteSelectedButton, styles.selectionActionButton]}
+                onPress={() => setShowDeleteSelectedDialog(true)}
+              >
+                <Text style={styles.deleteSelectedButtonText} numberOfLines={1}>
+                  🗑️ Delete ({selectedStudents.size})
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       )}
@@ -399,34 +399,30 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#4A90D9',
-    padding: 20,
-    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
+    flexShrink: 1,
+    marginRight: 8,
   },
   headerSubject: {
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '400',
     color: 'rgba(255,255,255,0.8)',
-    marginTop: 4,
   },
-  headerStats: {
-    flexDirection: 'row',
-    marginTop: 16,
-  },
-  headerStat: {
-    marginRight: 32,
-  },
-  headerStatNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  headerStatLabel: {
+  headerStatsInline: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
+    color: 'rgba(255,255,255,0.85)',
+    flexShrink: 0,
   },
   actions: {
     padding: 12,
@@ -517,13 +513,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  selectionActionRow: {
+    flexDirection: 'row',
+  },
+  selectionActionButton: {
+    flex: 1,
+  },
   setJoinDateButton: {
     backgroundColor: '#4A90D9',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 8,
+    marginRight: 8,
   },
   setJoinDateButtonText: {
     color: '#fff',
@@ -532,7 +534,7 @@ const styles = StyleSheet.create({
   },
   deleteSelectedButton: {
     backgroundColor: '#d32f2f',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',

@@ -160,7 +160,7 @@ export const ClassStatsScreen: React.FC<Props> = ({ navigation, route }) => {
             styles.percentageValue,
             item.isDetained && styles.percentageDetained
           ]}>
-            {item.attendancePercentage.toFixed(1)}%
+            {item.totalClasses > 0 ? `${item.attendancePercentage.toFixed(1)}%` : '—'}
           </Text>
           <Text style={styles.statLabel}>Attendance</Text>
         </View>

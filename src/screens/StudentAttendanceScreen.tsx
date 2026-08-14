@@ -167,9 +167,9 @@ export const StudentAttendanceScreen: React.FC<Props> = ({ navigation, route }) 
         </View>
         <View style={[styles.summaryCard, isDetained && styles.detainedCard]}>
           <Text style={[styles.summaryNumber, isDetained ? styles.detainedColor : styles.presentColor]}>
-            {percentage.toFixed(1)}%
+            {totalLectures > 0 ? `${percentage.toFixed(1)}%` : '—'}
           </Text>
-          <Text style={styles.summaryLabel}>{isDetained ? 'Detained' : 'Attendance'}</Text>
+          <Text style={styles.summaryLabel}>{isDetained ? 'Detained' : totalLectures > 0 ? 'Attendance' : 'No data'}</Text>
         </View>
       </View>
 
